@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能搶票助手 - 用戶系統 + 協作功能</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.x/gun.js"></script>
+  <style>
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .slide-enter-active, .slide-leave-active { transition: transform 0.3s; }
+    .slide-enter-from { transform: translateX(-100%); }
+    .slide-leave-to { transform: translateX(100%); }
+    .invite-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .collaboration-card {
+      border-left: 4px solid #667eea;
+      transition: all 0.3s;
+    }
+    .collaboration-card:hover {
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      transform: translateY(-2px);
+    }
+    .friend-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 0.875rem;
+    }
+    .online-indicator {
+      width: 12px;
+      height: 12px;
+      background: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 0.5rem;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app">
+    <!-- 導航欄 -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+          <div class="flex items-center space-x-2">
+            <div class="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              🎫 搶票助手
+            </div>
+          </div>
+          <div class="flex items-center space-x-4">
+            <div class="text-sm text-gray-600" v-if="currentUser">
+              歡迎 <span class="font-semibold">{{ currentUser }}</span>
+            </div>
+            <button @click="logout" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">登出</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div v-if="!currentUser" class="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+      <!-- 登入/註冊表單 -->
+      <div class="w-full max-w-md">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+          <h2 class="text-2xl font-bold text-center mb-6">{{ showRegister ? '創建帳戶' : '登入' }}</h2>
+
+          <form @submit.prevent="showRegister ? register() : login()" class="space-y-4">
+            <input v-model="authForm.email" type="email" placeholder="電郵" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <input v-model="authForm.password" type="password" placeholder="密碼" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <input v-if="showRegister" v-model="authForm.username" type="text" placeholder="用戶名" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+
+            <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-2 rounded-lg font-semibold hover:opacity-90">
+              {{ showRegister ? '註冊' : '登入' }}
+            </button>
+          </form>
+
+          <div class="mt-4 text-center">
+            <button @click="showRegister = !showRegister" class="text-sm text-purple-600 hover:text-purple-700">
+              {{ showRegister ? '已有帳戶？登入' : '沒有帳戶？註冊' }}
+            </button>
+          </div>
+
+          <div class="mt-6 pt-6 border-t border-gray-200">
+            <p class="text-xs text-gray-500 text-center mb-3">測試帳號</p>
+            <div class="space-y-2">
+              <button @click="quickLogin('alice')" class="w-full bg-gray-100 hover:bg-gray-200 py-2 rounded text-sm font-semibold">
+                快速登入: Alice
+              </button>
+              <button @click="quickLogin('bob')" class="w-full bg-gray-100 hover:bg-gray-200 py-2 rounded text-sm font-semibold">
+                快速登入: Bob
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主應用 -->
+    <div v-else class="min-h-screen">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- 分頁導航 -->
+        <div class="flex space-x-1 mb-8 border-b border-gray-200 overflow-x-auto">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="activeTab = tab.id"
+            :class="[
+              'px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition',
+              activeTab === tab.id
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            ]"
+          >
+            {{ tab.icon }} {{ tab.name }}
+            <span v-if="tab.id === 'invitations' && pendingInvitations.length > 0" class="invite-badge ml-2">
+              {{ pendingInvitations.length }}
+            </span>
+          </button>
+        </div>
+
+        <!-- 儀表板 -->
+        <div v-if="activeTab === 'dashboard'" class="space-y-6">
+          <!-- 統計卡片 -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-3xl font-bold text-purple-600">{{ userStats.totalTasks }}</div>
+              <div class="text-gray-600 text-sm mt-2">任務總數</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-3xl font-bold text-blue-600">{{ userStats.completedTasks }}</div>
+              <div class="text-gray-600 text-sm mt-2">已完成任務</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-3xl font-bold text-green-600">{{ userStats.totalFriends }}</div>
+              <div class="text-gray-600 text-sm mt-2">朋友數量</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-3xl font-bold text-orange-600">{{ userStats.activeCollaborations }}</div>
+              <div class="text-gray-600 text-sm mt-2">協作項目</div>
+            </div>
+          </div>
+
+          <!-- 朋友快速訪問 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-4">👥 我的朋友</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div v-for="friend in friends" :key="friend.username" class="flex flex-col items-center p-3 border rounded-lg hover:bg-gray-50 transition cursor-pointer">
+                <div class="friend-avatar mb-2">{{ friend.username.charAt(0).toUpperCase() }}</div>
+                <div class="text-sm font-semibold">{{ friend.username }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ friend.mutualTasks.length }} 共享任務</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最近協作 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-4">🤝 最近協作</h3>
+            <div class="space-y-3">
+              <div v-for="collab in recentCollaborations.slice(0, 3)" :key="collab.id" class="collaboration-card bg-gray-50 rounded p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">{{ collab.task.title }}</div>
+                    <div class="text-sm text-gray-600">協作者: {{ collab.collaborators.map(c => c.username).join(', ') }}</div>
+                  </div>
+                  <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">進行中</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 朋友管理 -->
+        <div v-if="activeTab === 'friends'" class="space-y-6">
+          <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-bold">👥 朋友列表</h3>
+              <button @click="showInviteModal = true" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-semibold">
+                + 邀請朋友
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div v-for="friend in friends" :key="friend.username" class="border rounded-lg p-4 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="friend-avatar">{{ friend.username.charAt(0).toUpperCase() }}</div>
+                  <div>
+                    <div class="font-semibold">{{ friend.username }}</div>
+                    <div class="text-xs text-gray-500">已添加 {{ formatDate(friend.addedAt) }}</div>
+                  </div>
+                </div>
+                <button @click="removeFriend(friend.username)" class="text-red-600 hover:text-red-700 text-sm font-semibold">移除</button>
+              </div>
+            </div>
+
+            <div v-if="friends.length === 0" class="text-center py-8 text-gray-500">
+              暫無朋友，邀請一些朋友開始協作吧！
+            </div>
+          </div>
+        </div>
+
+        <!-- 邀請管理 -->
+        <div v-if="activeTab === 'invitations'" class="space-y-6">
+          <!-- 待處理邀請 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-4">📨 待處理邀請 {{ pendingInvitations.length > 0 ? `(${pendingInvitations.length})` : '' }}</h3>
+            <div class="space-y-3">
+              <div v-for="invite in pendingInvitations" :key="invite.id" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">{{ invite.from }} 邀請你成為朋友</div>
+                    <div class="text-sm text-gray-600 mt-1">{{ invite.message || '讓我們開始協作吧！' }}</div>
+                    <div class="text-xs text-gray-500 mt-2">
+                      有效期至: {{ formatDate(invite.expiresAt) }}
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button @click="acceptInvite(invite.code)" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-semibold">
+                      接受
+                    </button>
+                    <button @click="declineInvite(invite.code)" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-semibold">
+                      拒絕
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="pendingInvitations.length === 0" class="text-center py-8 text-gray-500">
+                沒有待處理的邀請
+              </div>
+            </div>
+          </div>
+
+          <!-- 已發送邀請 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-4">📤 已發送邀請</h3>
+            <div class="space-y-3">
+              <div v-for="invite in sentInvitations" :key="invite.id" class="bg-gray-50 border rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">{{ invite.to }}</div>
+                  <div class="text-sm text-gray-600">狀態: <span :class="[
+                    'font-semibold',
+                    invite.status === 'pending' ? 'text-yellow-600' :
+                    invite.status === 'accepted' ? 'text-green-600' :
+                    'text-red-600'
+                  ]">{{ invite.status === 'pending' ? '待回應' : invite.status === 'accepted' ? '已接受' : '已拒絕' }}</span></div>
+                </div>
+                <div v-if="invite.status === 'pending'" class="flex space-x-2">
+                  <button @click="resendInvite(invite.id)" class="text-blue-600 hover:text-blue-700 text-sm font-semibold">重新發送</button>
+                  <button @click="cancelInvite(invite.id)" class="text-gray-600 hover:text-gray-700 text-sm font-semibold">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 協作任務 -->
+        <div v-if="activeTab === 'collaborations'" class="space-y-6">
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-6">🤝 我的協作</h3>
+
+            <div v-if="userCollaborations.length === 0" class="text-center py-8 text-gray-500">
+              暫無協作項目，邀請朋友開始協作吧！
+            </div>
+
+            <div v-else class="space-y-4">
+              <div v-for="collab in userCollaborations" :key="collab.id" class="collaboration-card bg-white border rounded-lg p-4">
+                <div class="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 class="font-bold text-lg">{{ collab.task.title }}</h4>
+                    <p class="text-sm text-gray-600 mt-1">{{ collab.task.description }}</p>
+                  </div>
+                  <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">{{ collab.status }}</span>
+                </div>
+
+                <!-- 協作者列表 -->
+                <div class="mb-4">
+                  <div class="text-sm font-semibold text-gray-700 mb-2">協作者:</div>
+                  <div class="flex flex-wrap gap-2">
+                    <div v-for="collab in collab.collaborators" :key="collab.username" class="flex items-center bg-purple-50 px-3 py-1 rounded-full text-sm">
+                      <span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                      {{ collab.username }} <span class="text-xs text-gray-600 ml-1">({{ collab.role }})</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 評論區 -->
+                <div class="bg-gray-50 rounded p-3 mb-3">
+                  <div class="text-sm font-semibold mb-2">💬 評論 ({{ collab.comments.length }})</div>
+                  <div class="space-y-2 max-h-32 overflow-y-auto">
+                    <div v-for="comment in collab.comments" :key="comment.id" class="text-sm bg-white rounded p-2">
+                      <div class="font-semibold">{{ comment.author }}</div>
+                      <div class="text-gray-700">{{ comment.content }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 添加評論 -->
+                <div class="flex gap-2">
+                  <input
+                    v-model="newComment[collab.id]"
+                    type="text"
+                    placeholder="添加評論..."
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    @keyup.enter="addCommentToCollab(collab.id)"
+                  >
+                  <button @click="addCommentToCollab(collab.id)" class="bg-purple-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-purple-700">
+                    發送
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 任務管理 -->
+        <div v-if="activeTab === 'tasks'" class="space-y-6">
+          <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-bold">📋 我的任務</h3>
+              <button @click="showTaskModal = true" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-semibold">
+                + 新建任務
+              </button>
+            </div>
+
+            <!-- 搜尋和過濾 -->
+            <div class="flex gap-3 mb-6">
+              <input
+                v-model="taskSearch"
+                type="text"
+                placeholder="搜尋任務..."
+                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+              <select v-model="taskFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="">所有狀態</option>
+                <option value="pending">待機</option>
+                <option value="completed">已完成</option>
+              </select>
+            </div>
+
+            <!-- 任務列表 -->
+            <div class="space-y-3">
+              <div v-for="task in filteredTasks" :key="task.id" class="border rounded-lg p-4 hover:bg-gray-50 transition">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <h4 class="font-semibold">{{ task.title }}</h4>
+                    <p class="text-sm text-gray-600 mt-1">{{ task.description }}</p>
+                    <div class="flex gap-2 mt-3">
+                      <span :class="[
+                        'text-xs px-2 py-1 rounded font-semibold',
+                        task.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                      ]">
+                        {{ task.status === 'pending' ? '待機' : '已完成' }}
+                      </span>
+                      <span v-if="task.isShared" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold">🔗 已共享</span>
+                    </div>
+                  </div>
+                  <button @click="shareTaskWithFriends(task)" class="text-purple-600 hover:text-purple-700 font-semibold text-sm">
+                    共享
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="filteredTasks.length === 0" class="text-center py-8 text-gray-500">
+                沒有找到匹配的任務
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 設置 -->
+        <div v-if="activeTab === 'settings'" class="space-y-6">
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-bold mb-6">⚙️ 設置</h3>
+
+            <div class="space-y-4">
+              <div class="border-b pb-4">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                  <input type="checkbox" v-model="settings.enableNotifications" class="w-4 h-4 text-purple-600">
+                  <span class="font-semibold">啟用通知</span>
+                </label>
+              </div>
+
+              <div class="border-b pb-4">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                  <input type="checkbox" v-model="settings.allowInvites" class="w-4 h-4 text-purple-600">
+                  <span class="font-semibold">允許他人邀請</span>
+                </label>
+              </div>
+
+              <div class="border-b pb-4">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                  <input type="checkbox" v-model="settings.darkMode" class="w-4 h-4 text-purple-600">
+                  <span class="font-semibold">深色主題</span>
+                </label>
+              </div>
+
+              <div class="pt-4">
+                <button @click="exportData" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mr-2 font-semibold">
+                  💾 導出數據
+                </button>
+                <button @click="clearData" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-semibold">
+                  🗑️ 清除所有數據
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 邀請朋友模態框 -->
+    <div v-if="showInviteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h2 class="text-xl font-bold mb-4">邀請朋友</h2>
+
+        <form @submit.prevent="inviteFriend" class="space-y-4">
+          <input
+            v-model="inviteForm.email"
+            type="email"
+            placeholder="朋友的電郵"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+          <textarea
+            v-model="inviteForm.message"
+            placeholder="邀請信息（可選）"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            rows="3"
+          ></textarea>
+
+          <div class="flex gap-2">
+            <button type="submit" class="flex-1 bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700">
+              發送邀請
+            </button>
+            <button type="button" @click="showInviteModal = false" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400">
+              取消
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 新建任務模態框 -->
+    <div v-if="showTaskModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h2 class="text-xl font-bold mb-4">新建任務</h2>
+
+        <form @submit.prevent="createTask" class="space-y-4">
+          <input
+            v-model="taskForm.title"
+            type="text"
+            placeholder="任務標題"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+          <textarea
+            v-model="taskForm.description"
+            placeholder="任務描述"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            rows="3"
+          ></textarea>
+
+          <div class="flex gap-2">
+            <button type="submit" class="flex-1 bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700">
+              創建
+            </button>
+            <button type="button" @click="showTaskModal = false" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400">
+              取消
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed } = Vue
+
+    // 導入協作系統
+    async function loadCollaborationSystem() {
+      const script = document.createElement('script')
+      script.src = './js/collaboration.js'
+      script.type = 'module'
+      document.head.appendChild(script)
+    }
+
+    createApp({
+      setup() {
+        // 狀態
+        const currentUser = ref(null)
+        const activeTab = ref('dashboard')
+        const showRegister = ref(false)
+        const showInviteModal = ref(false)
+        const showTaskModal = ref(false)
+        const taskSearch = ref('')
+        const taskFilter = ref('')
+
+        // 表單數據
+        const authForm = reactive({ email: '', password: '', username: '' })
+        const inviteForm = reactive({ email: '', message: '' })
+        const taskForm = reactive({ title: '', description: '' })
+        const newComment = reactive({})
+
+        // 應用數據
+        const friends = ref([])
+        const tasks = ref([])
+        const pendingInvitations = ref([])
+        const sentInvitations = ref([])
+        const userCollaborations = ref([])
+
+        // 設置
+        const settings = reactive({
+          enableNotifications: true,
+          allowInvites: true,
+          darkMode: false
+        })
+
+        // 分頁配置
+        const tabs = [
+          { id: 'dashboard', name: '儀表板', icon: '📊' },
+          { id: 'friends', name: '朋友', icon: '👥' },
+          { id: 'invitations', name: '邀請', icon: '📨' },
+          { id: 'collaborations', name: '協作', icon: '🤝' },
+          { id: 'tasks', name: '任務', icon: '📋' },
+          { id: 'settings', name: '設置', icon: '⚙️' }
+        ]
+
+        // 計算屬性
+        const userStats = computed(() => ({
+          totalTasks: tasks.value.length,
+          completedTasks: tasks.value.filter(t => t.status === 'completed').length,
+          totalFriends: friends.value.length,
+          activeCollaborations: userCollaborations.value.length
+        }))
+
+        const filteredTasks = computed(() => {
+          let result = tasks.value
+          if (taskSearch.value) {
+            result = result.filter(t =>
+              t.title.toLowerCase().includes(taskSearch.value.toLowerCase())
+            )
+          }
+          if (taskFilter.value) {
+            result = result.filter(t => t.status === taskFilter.value)
+          }
+          return result
+        })
+
+        const recentCollaborations = computed(() =>
+          userCollaborations.value.slice().reverse()
+        )
+
+        // 方法
+        const login = () => {
+          if (authForm.email && authForm.password) {
+            currentUser.value = authForm.email.split('@')[0]
+            authForm.email = ''
+            authForm.password = ''
+            initializeUserData()
+          }
+        }
+
+        const register = () => {
+          if (authForm.email && authForm.password && authForm.username) {
+            currentUser.value = authForm.username
+            authForm.email = ''
+            authForm.password = ''
+            authForm.username = ''
+            initializeUserData()
+          }
+        }
+
+        const quickLogin = (username) => {
+          currentUser.value = username
+          initializeUserData()
+        }
+
+        const logout = () => {
+          currentUser.value = null
+          friends.value = []
+          tasks.value = []
+          pendingInvitations.value = []
+          sentInvitations.value = []
+          userCollaborations.value = []
+        }
+
+        const initializeUserData = () => {
+          // 模擬數據
+          const mockFriends = {
+            alice: ['bob', 'charlie'],
+            bob: ['alice', 'david'],
+            charlie: ['alice'],
+            david: ['bob']
+          }
+
+          const mockTasks = {
+            alice: [
+              { id: '1', title: '2025年演唱會', description: '搶購 Coldplay 演唱會門票', status: 'pending', isShared: false },
+              { id: '2', title: 'Taylor Swift 演出', description: '午夜巡迴演唱會', status: 'pending', isShared: true }
+            ],
+            bob: [
+              { id: '3', title: '無損樂隊演出', description: '搶購演唱會門票', status: 'completed', isShared: false }
+            ]
+          }
+
+          if (mockFriends[currentUser.value]) {
+            friends.value = mockFriends[currentUser.value].map(f => ({
+              username: f,
+              addedAt: Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
+              mutualTasks: [1, 2]
+            }))
+          }
+
+          if (mockTasks[currentUser.value]) {
+            tasks.value = mockTasks[currentUser.value]
+          }
+
+          // 模擬待機邀請
+          if (currentUser.value === 'alice') {
+            pendingInvitations.value = [{
+              id: '1',
+              from: 'charlie',
+              code: 'INV-CHARLIE-001',
+              message: '讓我們開始協作吧！',
+              expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+            }]
+          }
+
+          // 模擬協作項目
+          userCollaborations.value = [{
+            id: 'collab-1',
+            task: { title: '2025年演唱會門票搶購計劃', description: '與朋友協作搶購演唱會門票' },
+            collaborators: [
+              { username: currentUser.value, role: 'owner', joinedAt: Date.now() },
+              { username: friends.value[0]?.username || 'friend', role: 'editor', joinedAt: Date.now() }
+            ],
+            status: 'active',
+            comments: [
+              { id: '1', author: currentUser.value, content: '我已準備好了！' },
+              { id: '2', author: friends.value[0]?.username || 'friend', content: '我也是！' }
+            ]
+          }]
+        }
+
+        const inviteFriend = () => {
+          if (inviteForm.email) {
+            sentInvitations.value.push({
+              id: `invite-${Date.now()}`,
+              from: currentUser.value,
+              to: inviteForm.email.split('@')[0],
+              code: `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+              status: 'pending',
+              createdAt: Date.now(),
+              expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+            })
+            inviteForm.email = ''
+            inviteForm.message = ''
+            showInviteModal.value = false
+          }
+        }
+
+        const acceptInvite = (code) => {
+          const invite = pendingInvitations.value.find(i => i.code === code)
+          if (invite) {
+            friends.value.push({
+              username: invite.from,
+              addedAt: Date.now(),
+              mutualTasks: []
+            })
+            pendingInvitations.value = pendingInvitations.value.filter(i => i.code !== code)
+          }
+        }
+
+        const declineInvite = (code) => {
+          pendingInvitations.value = pendingInvitations.value.filter(i => i.code !== code)
+        }
+
+        const removeFriend = (username) => {
+          friends.value = friends.value.filter(f => f.username !== username)
+        }
+
+        const resendInvite = (id) => {
+          const invite = sentInvitations.value.find(i => i.id === id)
+          if (invite) {
+            invite.expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
+          }
+        }
+
+        const cancelInvite = (id) => {
+          sentInvitations.value = sentInvitations.value.filter(i => i.id !== id)
+        }
+
+        const createTask = () => {
+          if (taskForm.title) {
+            tasks.value.push({
+              id: `task-${Date.now()}`,
+              title: taskForm.title,
+              description: taskForm.description,
+              status: 'pending',
+              isShared: false
+            })
+            taskForm.title = ''
+            taskForm.description = ''
+            showTaskModal.value = false
+          }
+        }
+
+        const shareTaskWithFriends = (task) => {
+          task.isShared = !task.isShared
+          if (task.isShared) {
+            // 創建協作或共享
+            console.log('任務已共享:', task.title)
+          }
+        }
+
+        const addCommentToCollab = (collabId) => {
+          const collab = userCollaborations.value.find(c => c.id === collabId)
+          if (collab && newComment[collabId]) {
+            collab.comments.push({
+              id: `comment-${Date.now()}`,
+              author: currentUser.value,
+              content: newComment[collabId]
+            })
+            newComment[collabId] = ''
+          }
+        }
+
+        const exportData = () => {
+          const data = {
+            user: currentUser.value,
+            friends: friends.value,
+            tasks: tasks.value,
+            collaborations: userCollaborations.value
+          }
+          const json = JSON.stringify(data, null, 2)
+          const blob = new Blob([json], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${currentUser.value}-data.json`
+          a.click()
+        }
+
+        const clearData = () => {
+          if (confirm('確認清除所有數據？')) {
+            friends.value = []
+            tasks.value = []
+            pendingInvitations.value = []
+            sentInvitations.value = []
+            userCollaborations.value = []
+          }
+        }
+
+        const formatDate = (timestamp) => {
+          return new Date(timestamp).toLocaleDateString('zh-Hant')
+        }
+
+        return {
+          currentUser,
+          activeTab,
+          showRegister,
+          showInviteModal,
+          showTaskModal,
+          taskSearch,
+          taskFilter,
+          authForm,
+          inviteForm,
+          taskForm,
+          newComment,
+          friends,
+          tasks,
+          pendingInvitations,
+          sentInvitations,
+          userCollaborations,
+          settings,
+          tabs,
+          userStats,
+          filteredTasks,
+          recentCollaborations,
+          login,
+          register,
+          quickLogin,
+          logout,
+          inviteFriend,
+          acceptInvite,
+          declineInvite,
+          removeFriend,
+          resendInvite,
+          cancelInvite,
+          createTask,
+          shareTaskWithFriends,
+          addCommentToCollab,
+          exportData,
+          clearData,
+          formatDate
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>

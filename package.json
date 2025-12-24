@@ -1,0 +1,29 @@
+{
+  "name": "ticket-bot-helper",
+  "version": "0.1.0",
+  "description": "智能搶票助手 - 幫助追星族自動搶購演唱會門票",
+  "type": "module",
+  "scripts": {
+    "dev": "http-server -p 8080 -o",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "ticket",
+    "bot",
+    "automation",
+    "vue3",
+    "gun.js"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@testing-library/dom": "^9.3.3",
+    "@testing-library/user-event": "^14.5.1",
+    "@vitest/ui": "^1.0.0",
+    "http-server": "^14.1.1",
+    "jsdom": "^27.3.0",
+    "vitest": "^1.0.0"
+  }
+}

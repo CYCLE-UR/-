@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能搶票助手 - 後台管理系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .sidebar-link {
+      @apply flex items-center px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer rounded-lg;
+    }
+    .sidebar-link.active {
+      @apply bg-indigo-100 text-indigo-700 font-medium;
+    }
+    .stat-card {
+      @apply bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow;
+    }
+    .table-row {
+      @apply hover:bg-gray-50 transition-colors;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="app"></div>
+
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  
+  <!-- GUN.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.x/gun.js"></script>
+  
+  <!-- 後台管理系統 -->
+  <script type="module">
+    const { createApp, ref, reactive, computed, onMounted, watch } = Vue
+
+    // 導入模塊
+    const modules = await Promise.all([
+      import('./js/storage.js'),
+      import('./js/bot-engine.js'),
+      import('./js/automation-engine.js'),
+      import('./js/notifications.js'),
+      import('./js/admin.js')
+    ])
+
+    const { initGUN, loginAnonymous, getCurrentUser, logout } = modules[0]
+    const { createBotEngine } = modules[1]
+    const { createAutomationEngine } = modules[2]
+    const { createNotificationSystem } = modules[3]
+    const { createAdminSystem } = modules[4]
+
+    // 創建系統實例
+    const botEngine = createBotEngine()
+    const automationEngine = createAutomationEngine()
+    const notificationSystem = createNotificationSystem()
+    const adminSystem = createAdminSystem(botEngine, automationEngine)
+
+    // 創建 Vue 應用
+    const app = createApp({
+      template: `
+        <div v-if="!isAdminLoggedIn" class="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+          <!-- 管理員登入界面 -->
+          <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+              <div class="text-6xl mb-4">🔐</div>
+              <h2 class="text-3xl font-bold text-gray-800 mb-2">後台管理系統</h2>
+              <p class="text-gray-600">請輸入管理員密碼</p>
+            </div>
+            
+            <div v-if="loginError" class="bg-red-100 text-red-700 px-4 py-3 rounded-lg mb-4">
+              {{ loginError }}
+            </div>
+            
+            <form @submit.prevent="handleAdminLogin" class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">管理員帳號</label>
+                <input v-model="adminUsername" type="text" 
+                       class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                       placeholder="admin" required>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">密碼</label>
+                <input v-model="adminPassword" type="password" 
+                       class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                       placeholder="請輸入密碼" required>
+              </div>
+              <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium">
+                🔓 登入後台
+              </button>
+            </form>
+            
+            <div class="mt-6 text-center text-sm text-gray-500">
+              <p>提示：默認密碼是 <code class="bg-gray-100 px-2 py-1 rounded">admin123</code></p>
+              <a href="demo.html" class="text-indigo-600 hover:underline mt-2 inline-block">← 返回前台</a>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="min-h-screen bg-gray-100">
+          <!-- 頂部導航欄 -->
+          <nav class="bg-white shadow-md sticky top-0 z-50">
+            <div class="mx-auto px-6 py-4">
+              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <div class="text-3xl">🎫</div>
+                  <div>
+                    <h1 class="text-xl font-bold text-gray-800">智能搶票助手 - 後台管理</h1>
+                    <p class="text-xs text-gray-500">管理員: {{ adminUser }} | 全局視圖</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <button @click="refreshData" class="btn-secondary text-sm">
+                    🔄 刷新
+                  </button>
+                  <button @click="handleAdminLogout" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">
+                    🚪 登出
+                  </button>
+                  <a href="demo.html" class="btn-secondary text-sm">
+                    ← 返回前台
+                  </a>
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          <div class="flex">
+            <!-- 側邊欄 -->
+            <aside class="w-64 bg-white shadow-md min-h-screen p-4">
+              <nav class="space-y-2">
+                <div @click="currentView = 'dashboard'" 
+                     :class="['sidebar-link', { active: currentView === 'dashboard' }]">
+                  <span class="text-xl mr-3">📊</span>
+                  <span>儀表板</span>
+                </div>
+                <div @click="currentView = 'users'" 
+                     :class="['sidebar-link', { active: currentView === 'users' }]">
+                  <span class="text-xl mr-3">👥</span>
+                  <span>用戶管理</span>
+                </div>
+                <div @click="currentView = 'tasks'" 
+                     :class="['sidebar-link', { active: currentView === 'tasks' }]">
+                  <span class="text-xl mr-3">📋</span>
+                  <span>任務監控</span>
+                </div>
+                <div @click="currentView = 'statistics'" 
+                     :class="['sidebar-link', { active: currentView === 'statistics' }]">
+                  <span class="text-xl mr-3">📈</span>
+                  <span>統計分析</span>
+                </div>
+                <div @click="currentView = 'monitor'" 
+                     :class="['sidebar-link', { active: currentView === 'monitor' }]">
+                  <span class="text-xl mr-3">🖥️</span>
+                  <span>系統監控</span>
+                </div>
+                <div @click="currentView = 'notifications'" 
+                     :class="['sidebar-link', { active: currentView === 'notifications' }]">
+                  <span class="text-xl mr-3">🔔</span>
+                  <span>通知記錄</span>
+                </div>
+                <div @click="currentView = 'settings'" 
+                     :class="['sidebar-link', { active: currentView === 'settings' }]">
+                  <span class="text-xl mr-3">⚙️</span>
+                  <span>系統設置</span>
+                </div>
+              </nav>
+            </aside>
+
+            <!-- 主內容區 -->
+            <main class="flex-1 p-6">
+              <!-- 儀表板視圖 -->
+              <div v-if="currentView === 'dashboard'" class="space-y-6">
+                <div class="flex justify-between items-center">
+                  <h2 class="text-2xl font-bold text-gray-800">系統概覽</h2>
+                  <div class="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm">
+                    ⚠️ 管理員模式：可查看所有用戶數據
+                  </div>
+                </div>
+                
+                <!-- 統計卡片 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">總用戶數</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-2">{{ stats.totalUsers }}</p>
+                      </div>
+                      <div class="text-4xl">👥</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">活躍用戶: {{ stats.activeUsers }}</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">總任務數</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-2">{{ stats.totalTasks }}</p>
+                      </div>
+                      <div class="text-4xl">📋</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">進行中: {{ stats.runningTasks }}</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">成功率</p>
+                        <p class="text-3xl font-bold text-green-600 mt-2">{{ stats.successRate }}%</p>
+                      </div>
+                      <div class="text-4xl">✅</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">成功: {{ stats.successTasks }}</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">今日任務</p>
+                        <p class="text-3xl font-bold text-indigo-600 mt-2">{{ stats.todayTasks }}</p>
+                      </div>
+                      <div class="text-4xl">📅</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">比昨日 +{{ stats.todayGrowth }}%</p>
+                  </div>
+                  
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">待執行</p>
+                        <p class="text-3xl font-bold text-yellow-600 mt-2">{{ stats.pendingTasks }}</p>
+                      </div>
+                      <div class="text-4xl">⏳</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">已暫停: {{ stats.pausedTasks }}</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">失敗任務</p>
+                        <p class="text-3xl font-bold text-red-600 mt-2">{{ stats.failedTasks }}</p>
+                      </div>
+                      <div class="text-4xl">❌</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">需要關注</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">存儲使用</p>
+                        <p class="text-3xl font-bold text-purple-600 mt-2">{{ systemMetrics.storageUsedMB }}</p>
+                      </div>
+                      <div class="text-4xl">💾</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">MB 已使用</p>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-gray-500 text-sm">平均執行</p>
+                        <p class="text-3xl font-bold text-blue-600 mt-2">{{ systemMetrics.avgExecutionTime }}</p>
+                      </div>
+                      <div class="text-4xl">⚡</div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">秒/任務</p>
+                  </div>
+                </div>
+
+                <!-- 圖表區域 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">任務狀態分布</h3>
+                    <canvas id="taskStatusChart"></canvas>
+                  </div>
+
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">7日任務趨勢</h3>
+                    <canvas id="taskTrendChart"></canvas>
+                  </div>
+                </div>
+
+                <!-- 最近活動 -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4">最近活動</h3>
+                  <div class="space-y-3">
+                    <div v-for="activity in recentActivities" :key="activity.id" 
+                         class="flex items-center justify-between py-3 border-b last:border-0">
+                      <div class="flex items-center gap-3">
+                        <span class="text-2xl">{{ activity.icon }}</span>
+                        <div>
+                          <p class="text-sm font-medium text-gray-800">{{ activity.title }}</p>
+                          <p class="text-xs text-gray-500">{{ activity.description }}</p>
+                        </div>
+                      </div>
+                      <span class="text-xs text-gray-400">{{ activity.time }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 用戶管理視圖 -->
+              <div v-if="currentView === 'users'" class="space-y-6">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <h2 class="text-2xl font-bold text-gray-800">用戶管理</h2>
+                    <p class="text-sm text-gray-600 mt-1">共 {{ users.length }} 個用戶，{{ users.filter(u => u.isActive).length }} 個活躍</p>
+                  </div>
+                  <div class="flex gap-3">
+                    <input v-model="userSearch" type="text" placeholder="搜索用戶..." 
+                           class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button @click="exportUsers" class="btn-secondary">📥 導出</button>
+                  </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                  <table class="w-full">
+                    <thead class="bg-gray-50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用戶ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">註冊時間</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">任務數</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">成功率</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                      <tr v-for="user in filteredUsers" :key="user.id" class="table-row">
+                        <td class="px-6 py-4 text-sm text-gray-800">{{ user.id.substring(0, 8) }}...</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">{{ formatDate(user.createdAt) }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-800">{{ user.taskCount }}</td>
+                        <td class="px-6 py-4 text-sm">
+                          <span :class="['font-medium', user.successRate > 50 ? 'text-green-600' : 'text-red-600']">
+                            {{ user.successRate }}%
+                          </span>
+                        </td>
+                        <td class="px-6 py-4">
+                          <span :class="['px-2 py-1 text-xs rounded-full', 
+                                       user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
+                            {{ user.isActive ? '活躍' : '非活躍' }}
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                          <button @click="viewUserDetail(user)" class="text-indigo-600 hover:text-indigo-800">
+                            查看
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- 任務監控視圖 -->
+              <div v-if="currentView === 'tasks'" class="space-y-6">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <h2 class="text-2xl font-bold text-gray-800">任務監控</h2>
+                    <p class="text-sm text-gray-600 mt-1">
+                      ⚠️ 管理員模式：顯示所有用戶的 {{ tasks.length }} 個任務
+                    </p>
+                  </div>
+                  <div class="flex gap-3">
+                    <select v-model="taskFilter" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="all">全部任務</option>
+                      <option value="pending">待執行</option>
+                      <option value="running">執行中</option>
+                      <option value="success">已成功</option>
+                      <option value="failed">已失敗</option>
+                    </select>
+                    <button @click="refreshTasks" class="btn-secondary">🔄 刷新</button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4">
+                  <div v-for="task in filteredTasks" :key="task.id" 
+                       class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-2">
+                          <h3 class="text-lg font-bold text-gray-800">{{ task.eventName }}</h3>
+                          <span :class="['status-badge', \`status-\${task.status}\`]">
+                            {{ getStatusText(task.status) }}
+                          </span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                          <div>
+                            <span class="text-gray-500">目標網址:</span> 
+                            <a :href="task.targetUrl" target="_blank" class="text-indigo-600 hover:underline ml-1">
+                              {{ task.targetUrl }}
+                            </a>
+                          </div>
+                          <div>
+                            <span class="text-gray-500">執行時間:</span> 
+                            <span class="ml-1">{{ formatDateTime(task.executionTime) }}</span>
+                          </div>
+                          <div>
+                            <span class="text-gray-500">創建者:</span> 
+                            <span class="ml-1">{{ task.userId.substring(0, 8) }}...</span>
+                          </div>
+                          <div>
+                            <span class="text-gray-500">創建時間:</span> 
+                            <span class="ml-1">{{ formatDate(task.createdAt) }}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button @click="viewTaskDetail(task)" class="btn-secondary text-sm ml-4">
+                        詳情
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 統計分析視圖 -->
+              <div v-if="currentView === 'statistics'" class="space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">統計分析</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">時段分布</h3>
+                    <canvas id="hourlyDistChart"></canvas>
+                  </div>
+
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">成功率趨勢</h3>
+                    <canvas id="successRateChart"></canvas>
+                  </div>
+
+                  <div class="bg-white rounded-xl shadow-md p-6 lg:col-span-2">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">熱門活動排行</h3>
+                    <div class="space-y-3">
+                      <div v-for="(event, index) in topEvents" :key="index" 
+                           class="flex items-center justify-between py-3 border-b last:border-0">
+                        <div class="flex items-center gap-3">
+                          <span class="text-2xl font-bold text-indigo-600">{{ index + 1 }}</span>
+                          <div>
+                            <p class="font-medium text-gray-800">{{ event.name }}</p>
+                            <p class="text-xs text-gray-500">{{ event.taskCount }} 個任務</p>
+                          </div>
+                        </div>
+                        <div class="text-right">
+                          <p class="text-sm font-medium text-green-600">{{ event.successRate }}% 成功率</p>
+                          <p class="text-xs text-gray-500">{{ event.totalAttempts }} 次嘗試</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 通知記錄視圖 -->
+              <div v-if="currentView === 'notifications'" class="space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">通知記錄</h2>
+
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <div class="space-y-3">
+                    <div v-for="notif in notifications" :key="notif.id" 
+                         class="flex items-start gap-4 py-4 border-b last:border-0">
+                      <span class="text-2xl">{{ getNotificationIcon(notif.type) }}</span>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="font-medium text-gray-800">{{ notif.title }}</p>
+                          <span class="text-xs text-gray-400">{{ formatDateTime(notif.timestamp) }}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">{{ notif.message }}</p>
+                        <span :class="['inline-block mt-2 px-2 py-1 text-xs rounded-full',
+                                     notif.type === 'success' ? 'bg-green-100 text-green-700' :
+                                     notif.type === 'failure' ? 'bg-red-100 text-red-700' :
+                                     notif.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                     'bg-blue-100 text-blue-700']">
+                          {{ notif.type }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 系統設置視圖 -->
+              <div v-if="currentView === 'settings'" class="space-y-6">
+
+              <!-- 系統監控視圖（管理員專用） -->
+              <div v-if="currentView === 'monitor'" class="space-y-6">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <h2 class="text-2xl font-bold text-gray-800">系統監控</h2>
+                    <p class="text-sm text-gray-600 mt-1">⚠️ 管理員專用：實時系統性能監控</p>
+                  </div>
+                  <button @click="loadData" class="btn-primary">🔄 刷新數據</button>
+                </div>
+
+                <!-- 性能指標 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">存儲使用情況</h3>
+                    <div class="space-y-3">
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">已使用空間</span>
+                        <span class="font-bold text-purple-600">{{ systemMetrics.storageUsedMB }} MB</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">存儲項目數</span>
+                        <span class="font-bold">{{ systemMetrics.storageKeys }}</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">總任務數</span>
+                        <span class="font-bold">{{ systemMetrics.totalTasks }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">性能指標</h3>
+                    <div class="space-y-3">
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">平均執行時間</span>
+                        <span class="font-bold text-blue-600">{{ systemMetrics.avgExecutionTime }}s</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">活躍用戶</span>
+                        <span class="font-bold text-green-600">{{ stats.activeUsers }}</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">運行中任務</span>
+                        <span class="font-bold text-yellow-600">{{ stats.runningTasks }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">系統狀態</h3>
+                    <div class="space-y-3">
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">系統狀態</span>
+                        <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          ✓ 正常
+                        </span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">成功率</span>
+                        <span :class="['font-bold', stats.successRate > 50 ? 'text-green-600' : 'text-red-600']">
+                          {{ stats.successRate }}%
+                        </span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">最後更新</span>
+                        <span class="text-sm text-gray-500">{{ formatDateTime(systemMetrics.timestamp) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 用戶活動時間線 -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4">用戶活動分布</h3>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center p-4 bg-blue-50 rounded-lg">
+                      <p class="text-2xl font-bold text-blue-600">{{ users.filter(u => u.taskCount > 10).length }}</p>
+                      <p class="text-sm text-gray-600 mt-1">重度用戶</p>
+                      <p class="text-xs text-gray-500">&gt;10 任務</p>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                      <p class="text-2xl font-bold text-green-600">{{ users.filter(u => u.taskCount >= 5 && u.taskCount <= 10).length }}</p>
+                      <p class="text-sm text-gray-600 mt-1">中度用戶</p>
+                      <p class="text-xs text-gray-500">5-10 任務</p>
+                    </div>
+                    <div class="text-center p-4 bg-yellow-50 rounded-lg">
+                      <p class="text-2xl font-bold text-yellow-600">{{ users.filter(u => u.taskCount > 0 && u.taskCount < 5).length }}</p>
+                      <p class="text-sm text-gray-600 mt-1">輕度用戶</p>
+                      <p class="text-xs text-gray-500">1-4 任務</p>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                      <p class="text-2xl font-bold text-gray-600">{{ users.filter(u => u.taskCount === 0).length }}</p>
+                      <p class="text-sm text-gray-600 mt-1">新用戶</p>
+                      <p class="text-xs text-gray-500">0 任務</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 危險操作區 -->
+                <div class="bg-red-50 border-2 border-red-200 rounded-xl p-6">
+                  <h3 class="text-lg font-bold text-red-800 mb-4">⚠️ 危險操作區</h3>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button @click="clearOldTasks" class="bg-yellow-600 text-white px-4 py-3 rounded-lg hover:bg-yellow-700">
+                      🗑️ 清理 30 天前任務
+                    </button>
+                    <button @click="exportAllData" class="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700">
+                      📥 導出所有數據
+                    </button>
+                    <button @click="resetSystem" class="bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700">
+                      ⚠️ 重置整個系統
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+                <h2 class="text-2xl font-bold text-gray-800">系統設置</h2>
+
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4">通知設置</h3>
+                  <div class="space-y-4">
+                    <label class="flex items-center justify-between">
+                      <span class="text-gray-700">啟用桌面通知</span>
+                      <input type="checkbox" v-model="settings.enableNotifications" class="toggle">
+                    </label>
+                    <label class="flex items-center justify-between">
+                      <span class="text-gray-700">任務成功時通知</span>
+                      <input type="checkbox" v-model="settings.notifyOnSuccess" class="toggle">
+                    </label>
+                    <label class="flex items-center justify-between">
+                      <span class="text-gray-700">任務失敗時通知</span>
+                      <input type="checkbox" v-model="settings.notifyOnFailure" class="toggle">
+                    </label>
+                  </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4">數據管理</h3>
+                  <div class="space-y-3">
+                    <button @click="exportAllData" class="btn-primary w-full">
+                      📥 導出所有數據
+                    </button>
+                    <button @click="clearOldTasks" class="btn-secondary w-full">
+                      🗑️ 清理舊任務（30天前）
+                    </button>
+                    <button @click="resetSystem" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 w-full">
+                      ⚠️ 重置系統
+                    </button>
+                  </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4">系統資訊</h3>
+                  <div class="space-y-2 text-sm text-gray-600">
+                    <p><span class="font-medium">版本:</span> v0.5</p>
+                    <p><span class="font-medium">最後更新:</span> 2025-12-17</p>
+                    <p><span class="font-medium">數據儲存:</span> GUN.js (去中心化)</p>
+                    <p><span class="font-medium">前端框架:</span> Vue 3</p>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      `,
+      setup() {
+        const isAdminLoggedIn = ref(false)
+        const adminUsername = ref('admin')
+        const adminPassword = ref('')
+        const loginError = ref('')
+        const currentView = ref('dashboard')
+        const adminUser = ref('Admin')
+        const userSearch = ref('')
+        const taskFilter = ref('all')
+        
+        const stats = reactive({
+          totalUsers: 0,
+          activeUsers: 0,
+          totalTasks: 0,
+          runningTasks: 0,
+          successRate: 0,
+          successTasks: 0,
+          todayTasks: 0,
+          todayGrowth: 0
+        })
+
+        const users = ref([])
+        const tasks = ref([])
+        const notifications = ref([])
+        const recentActivities = ref([])
+        const topEvents = ref([])
+
+        const settings = reactive({
+          enableNotifications: true,
+          notifyOnSuccess: true,
+          notifyOnFailure: true
+        })
+        
+        const systemMetrics = reactive({
+          storageUsedMB: 0,
+          avgExecutionTime: 0,
+          storageKeys: 0
+        })
+
+        // 計算屬性
+        const filteredUsers = computed(() => {
+          if (!userSearch.value) return users.value
+          return users.value.filter(u => 
+            u.id.toLowerCase().includes(userSearch.value.toLowerCase())
+          )
+        })
+
+        const filteredTasks = computed(() => {
+          if (taskFilter.value === 'all') return tasks.value
+          return tasks.value.filter(t => t.status === taskFilter.value)
+        })
+
+        // 方法
+        const handleAdminLogin = () => {
+          // 簡單的密碼驗證（實際應用應該使用加密和後端驗證）
+          if (adminUsername.value === 'admin' && adminPassword.value === 'admin123') {
+            isAdminLoggedIn.value = true
+            loginError.value = ''
+            localStorage.setItem('adminSession', 'true')
+            loadData()
+          } else {
+            loginError.value = '帳號或密碼錯誤'
+          }
+        }
+        
+        const handleAdminLogout = () => {
+          if (confirm('確定要登出後台管理系統嗎？')) {
+            isAdminLoggedIn.value = false
+            localStorage.removeItem('adminSession')
+            adminPassword.value = ''
+          }
+        }
+        
+        const checkAdminSession = () => {
+          // 檢查是否有有效的管理員會話
+          const session = localStorage.getItem('adminSession')
+          if (session === 'true') {
+            isAdminLoggedIn.value = true
+          }
+        }
+
+        const loadData = async () => {
+          try {
+            const data = await adminSystem.getDashboardData()
+            Object.assign(stats, data.stats)
+            users.value = data.users
+            tasks.value = data.tasks
+            recentActivities.value = data.recentActivities
+            topEvents.value = data.topEvents
+            
+            // 獲取通知歷史
+            notifications.value = notificationSystem.getNotificationHistory()
+            
+            // 獲取系統性能指標
+            const metrics = await adminSystem.getSystemMetrics()
+            Object.assign(systemMetrics, metrics)
+          } catch (error) {
+            console.error('加載數據失敗:', error)
+          }
+        }
+
+        const refreshData = () => {
+          loadData()
+          renderCharts()
+        }
+
+        const refreshTasks = async () => {
+          const allTasks = await botEngine.getAllTasks()
+          tasks.value = allTasks
+        }
+
+        const formatDate = (dateStr) => {
+          if (!dateStr) return '-'
+          const date = new Date(dateStr)
+          return date.toLocaleDateString('zh-TW')
+        }
+
+        const formatDateTime = (dateStr) => {
+          if (!dateStr) return '-'
+          const date = new Date(dateStr)
+          return date.toLocaleString('zh-TW')
+        }
+
+        const getStatusText = (status) => {
+          const statusMap = {
+            'pending': '待執行',
+            'running': '執行中',
+            'success': '已成功',
+            'failed': '已失敗',
+            'paused': '已暫停'
+          }
+          return statusMap[status] || status
+        }
+
+        const getNotificationIcon = (type) => {
+          const iconMap = {
+            'success': '✅',
+            'failure': '❌',
+            'progress': '⏳',
+            'warning': '⚠️'
+          }
+          return iconMap[type] || '📢'
+        }
+
+        const viewUserDetail = (user) => {
+          alert(`用戶詳情：\n\nID: ${user.id}\n任務數: ${user.taskCount}\n成功率: ${user.successRate}%`)
+        }
+
+        const viewTaskDetail = (task) => {
+          alert(`任務詳情：\n\n名稱: ${task.eventName}\n狀態: ${getStatusText(task.status)}\n網址: ${task.targetUrl}`)
+        }
+
+        const exportUsers = () => {
+          const csv = adminSystem.exportUsersToCSV(users.value)
+          downloadFile('users.csv', csv)
+        }
+
+        const exportAllData = () => {
+          const json = JSON.stringify({ users: users.value, tasks: tasks.value }, null, 2)
+          downloadFile('all-data.json', json)
+        }
+
+        const clearOldTasks = async () => {
+          if (confirm('確定要清理 30 天前的舊任務嗎？')) {
+            const count = await adminSystem.clearOldTasks(30)
+            alert(`已清理 ${count} 個舊任務`)
+            loadData()
+          }
+        }
+
+        const resetSystem = () => {
+          if (confirm('警告：這將清除所有數據！確定要重置系統嗎？')) {
+            if (confirm('最後確認：真的要清除所有數據嗎？此操作無法復原！')) {
+              localStorage.clear()
+              alert('系統已重置')
+              location.reload()
+            }
+          }
+        }
+
+        const downloadFile = (filename, content) => {
+          const blob = new Blob([content], { type: 'text/plain' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          a.click()
+          URL.revokeObjectURL(url)
+        }
+
+        const renderCharts = () => {
+          // 任務狀態分布圖
+          const taskStatusCtx = document.getElementById('taskStatusChart')
+          if (taskStatusCtx) {
+            new Chart(taskStatusCtx, {
+              type: 'doughnut',
+              data: {
+                labels: ['待執行', '執行中', '已成功', '已失敗'],
+                datasets: [{
+                  data: [
+                    tasks.value.filter(t => t.status === 'pending').length,
+                    tasks.value.filter(t => t.status === 'running').length,
+                    tasks.value.filter(t => t.status === 'success').length,
+                    tasks.value.filter(t => t.status === 'failed').length
+                  ],
+                  backgroundColor: ['#FCD34D', '#60A5FA', '#34D399', '#F87171']
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: true
+              }
+            })
+          }
+
+          // 7日任務趨勢圖
+          const taskTrendCtx = document.getElementById('taskTrendChart')
+          if (taskTrendCtx) {
+            const last7Days = Array.from({ length: 7 }, (_, i) => {
+              const d = new Date()
+              d.setDate(d.getDate() - (6 - i))
+              return d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+            })
+            
+            new Chart(taskTrendCtx, {
+              type: 'line',
+              data: {
+                labels: last7Days,
+                datasets: [{
+                  label: '任務數量',
+                  data: [12, 19, 15, 25, 22, 30, 28],
+                  borderColor: '#6366F1',
+                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                  tension: 0.4
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: true
+              }
+            })
+          }
+        }
+
+        onMounted(async () => {
+          checkAdminSession()
+          if (!isAdminLoggedIn.value) return
+          
+          await initGUN()
+          await loadData()
+          
+          // 延遲渲染圖表，確保 DOM 已加載
+          setTimeout(renderCharts, 500)
+        })
+
+        watch(currentView, () => {
+          // 當切換到 dashboard 時重新渲染圖表
+          if (currentView.value === 'dashboard') {
+            setTimeout(renderCharts, 100)
+          }
+        })
+
+        return {
+          isAdminLoggedIn,
+          adminUsername,
+          adminPassword,
+          loginError,
+          handleAdminLogin,
+          handleAdminLogout,
+          currentView,
+          adminUser,
+          userSearch,
+          taskFilter,
+          stats,
+          users,
+          tasks,
+          notifications,
+          recentActivities,
+          topEvents,
+          settings,
+          systemMetrics,
+          filteredUsers,
+          filteredTasks,
+          refreshData,
+          refreshTasks,
+          formatDate,
+          formatDateTime,
+          getStatusText,
+          getNotificationIcon,
+          viewUserDetail,
+          viewTaskDetail,
+          exportUsers,
+          exportAllData,
+          clearOldTasks,
+          resetSystem
+        }
+      }
+    })
+
+    app.mount('#app')
+  </script>
+</body>
+</html>

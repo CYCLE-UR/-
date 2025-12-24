@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="智能搶票助手 - 協作搶購演唱會門票，提高成功率">
+  <meta name="keywords" content="搶票,演唱會,自動化,協作,門票">
+  <title>智能搶票助手 - 協作搶票，成功率翻倍</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .feature-card { transition: transform 0.3s, box-shadow 0.3s; }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app">
+    <!-- 頂部導航 -->
+    <nav class="gradient-bg text-white py-4 shadow-lg">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="text-3xl">🎫</span>
+            <span class="text-xl font-bold">智能搶票助手</span>
+          </div>
+          <div class="text-sm">v0.9</div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero 區域 -->
+    <div class="gradient-bg text-white py-20">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h1 class="text-5xl font-bold mb-6">協作搶票，成功率翻倍</h1>
+        <p class="text-xl mb-8 opacity-90">邀請朋友一起搶票，自動化流程，實時通知，讓你不再錯過心儀的演唱會</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="user-system-v2.html" class="px-8 py-4 bg-white text-purple-600 rounded-lg font-bold text-lg hover:bg-gray-100 transition">
+            🚀 立即開始
+          </a>
+          <a href="demo-v0.8.html" class="px-8 py-4 bg-purple-700 text-white rounded-lg font-bold text-lg hover:bg-purple-800 transition">
+            📺 查看演示
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 功能特點 -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <h2 class="text-3xl font-bold text-center mb-12">核心功能</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">👥</div>
+          <h3 class="text-xl font-bold mb-3">朋友協作</h3>
+          <p class="text-gray-600">邀請朋友一起搶票，建立協作任務，實時溝通，提高成功率</p>
+        </div>
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">⚡</div>
+          <h3 class="text-xl font-bold mb-3">自動化搶票</h3>
+          <p class="text-gray-600">自動填寫表單，快速提交，精確計時，搶在第一時間</p>
+        </div>
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">📊</div>
+          <h3 class="text-xl font-bold mb-3">數據分析</h3>
+          <p class="text-gray-600">實時統計成功率，任務進度追蹤，智能優化策略</p>
+        </div>
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">🔔</div>
+          <h3 class="text-xl font-bold mb-3">實時通知</h3>
+          <p class="text-gray-600">桌面通知，郵件提醒，重要時刻不錯過</p>
+        </div>
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">🔒</div>
+          <h3 class="text-xl font-bold mb-3">隱私保護</h3>
+          <p class="text-gray-600">數據存儲在本地，無需伺服器，完全保護你的隱私</p>
+        </div>
+        <div class="feature-card bg-white rounded-lg shadow-lg p-6">
+          <div class="text-4xl mb-4">💯</div>
+          <h3 class="text-xl font-bold mb-3">完全免費</h3>
+          <p class="text-gray-600">開源項目，無需付費，持續更新，社群支持</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速導航 -->
+    <div class="bg-gray-100 py-16">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 class="text-3xl font-bold text-center mb-12">選擇你的入口</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <a href="user-system-v2.html" class="block bg-white rounded-lg shadow-lg p-8 hover:shadow-xl transition">
+            <div class="text-4xl mb-4 text-center">👤</div>
+            <h3 class="text-xl font-bold text-center mb-3">用戶系統</h3>
+            <p class="text-gray-600 text-center mb-4">完整的用戶功能，包括邀請朋友、協作任務、評論互動</p>
+            <div class="text-purple-600 text-center font-semibold">進入 →</div>
+          </a>
+          <a href="demo-v0.8.html" class="block bg-white rounded-lg shadow-lg p-8 hover:shadow-xl transition">
+            <div class="text-4xl mb-4 text-center">🎮</div>
+            <h3 class="text-xl font-bold text-center mb-3">完整演示</h3>
+            <p class="text-gray-600 text-center mb-4">查看所有功能演示，包括任務管理、搜尋、批量操作</p>
+            <div class="text-purple-600 text-center font-semibold">進入 →</div>
+          </a>
+          <a href="admin-v0.8.html" class="block bg-white rounded-lg shadow-lg p-8 hover:shadow-xl transition">
+            <div class="text-4xl mb-4 text-center">⚙️</div>
+            <h3 class="text-xl font-bold text-center mb-3">後台管理</h3>
+            <p class="text-gray-600 text-center mb-4">管理員界面，查看儀表板、用戶管理、任務監控</p>
+            <div class="text-purple-600 text-center font-semibold">進入 →</div>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 使用流程 -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <h2 class="text-3xl font-bold text-center mb-12">三步開始使用</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="text-center">
+          <div class="w-16 h-16 bg-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">1</div>
+          <h3 class="text-xl font-bold mb-3">快速登入</h3>
+          <p class="text-gray-600">點擊「快速登入」測試，或註冊新帳號</p>
+        </div>
+        <div class="text-center">
+          <div class="w-16 h-16 bg-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">2</div>
+          <h3 class="text-xl font-bold mb-3">創建任務</h3>
+          <p class="text-gray-600">設置搶票任務，選擇目標和時間</p>
+        </div>
+        <div class="text-center">
+          <div class="w-16 h-16 bg-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">3</div>
+          <h3 class="text-xl font-bold mb-3">邀請朋友</h3>
+          <p class="text-gray-600">發送邀請碼，一起協作搶票</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="gradient-bg text-white py-16">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 class="text-3xl font-bold mb-6">準備好搶到心儀的門票了嗎？</h2>
+        <p class="text-xl mb-8 opacity-90">加入我們，與朋友一起提高搶票成功率</p>
+        <a href="user-system-v2.html" class="inline-block px-10 py-4 bg-white text-purple-600 rounded-lg font-bold text-lg hover:bg-gray-100 transition">
+          立即開始使用
+        </a>
+      </div>
+    </div>
+
+    <!-- 頁腳 -->
+    <footer class="bg-gray-900 text-white py-8">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <h4 class="font-bold mb-4">快速鏈接</h4>
+            <ul class="space-y-2 text-gray-400">
+              <li><a href="QUICK_START.md" class="hover:text-white">快速開始</a></li>
+              <li><a href="USAGE_GUIDE.md" class="hover:text-white">使用指南</a></li>
+              <li><a href="DEPLOYMENT.md" class="hover:text-white">部署文檔</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="font-bold mb-4">功能文檔</h4>
+            <ul class="space-y-2 text-gray-400">
+              <li><a href="COLLABORATION_SYSTEM.md" class="hover:text-white">協作系統</a></li>
+              <li><a href="V0.8_UI_INTEGRATION.md" class="hover:text-white">UI 集成</a></li>
+              <li><a href="AGENTS.md" class="hover:text-white">開發文檔</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="font-bold mb-4">關於項目</h4>
+            <ul class="space-y-2 text-gray-400">
+              <li><a href="PRD.md" class="hover:text-white">產品需求</a></li>
+              <li><a href="README.md" class="hover:text-white">README</a></li>
+              <li><a href="https://github.com/CYCLE-UR/-" class="hover:text-white" target="_blank">GitHub</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+          <p>© 2025 智能搶票助手 v0.9 | 開源項目 | 完全免費</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <script>
+    const { createApp } = Vue
+    createApp({}).mount('#app')
+  </script>
+</body>
+</html>

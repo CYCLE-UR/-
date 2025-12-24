@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能搶票助手 - v0.8 完整演示</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-50">
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.x/gun.js"></script>
+  
+  <script type="module">
+    const { createApp, ref, reactive, computed, onMounted, watch } = Vue
+
+    // 導入所有模塊
+    const modules = await Promise.all([
+      import('./js/storage.js'),
+      import('./js/bot-engine.js'),
+      import('./js/automation-engine.js'),
+      import('./js/notifications.js'),
+      import('./js/task-model.js'),
+      import('./js/import-export.js'),
+      import('./js/batch-operations.js'),
+      import('./js/advanced-search.js'),
+      import('./js/permissions.js'),
+      import('./js/cache-manager.js'),
+      import('./js/performance-optimization.js'),
+      import('./js/skeleton-loader.js')
+    ])
+
+    const { initGUN, loginAnonymous, getCurrentUser, logout } = modules[0]
+    const { createBotEngine } = modules[1]
+    const { createAutomationEngine } = modules[2]
+    const { createNotificationSystem } = modules[3]
+    const { createDefaultTask } = modules[4]
+    const { exportTasksAsJSON, exportTasksAsCSV, importTasksFromJSON, importTasksFromCSV, importTasksFromFile } = modules[5]
+    const { batchStartTasks, batchPauseTasks, batchDeleteTasks, filterTasks, sortTasks } = modules[6]
+    const { advancedSearch, complexSearch, advancedSort, groupTasks, statisticsTasks } = modules[7]
+    const { createPermissionManager } = modules[8]
+    const { createCacheManager } = modules[9]
+    const { debounce, throttle, memoize } = modules[10]
+    const { createSkeletonManager, withSkeleton } = modules[11]
+
+    // 創建引擎和系統
+    const botEngine = createBotEngine()
+    const automationEngine = createAutomationEngine()
+    const notificationSystem = createNotificationSystem()
+    const permissionManager = createPermissionManager('user')
+    const cacheManager = createCacheManager(60000) // 60秒TTL
+    const skeletonManager = createSkeletonManager()
+
+    // 創建 Vue 應用
+    const app = createApp({
+      template: `
+        <div class="min-h-screen bg-gray-50">
+          <!-- 導航欄 -->
+          <nav class="bg-white shadow-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <div class="text-3xl">🎫</div>
+                  <div>
+                    <h1 class="text-xl font-bold text-gray-800">智能搶票助手</h1>
+                    <p class="text-xs text-gray-500">v0.8 - Stage 6 完整演示</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4" v-if="loggedIn">
+                  <div class="hidden md:flex gap-4 text-sm">
+                    <div><span class="font-bold text-indigo-600">{{ stats.total }}</span> 任務</div>
+                    <div><span class="font-bold text-green-600">{{ stats.success }}</span> 成功</div>
+                    <div><span class="font-bold text-red-600">{{ stats.failed }}</span> 失敗</div>
+                  </div>
+                  <button @click="handleLogout" class="btn-secondary text-sm">登出</button>
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          <!-- 主內容 -->
+          <main class="max-w-7xl mx-auto px-4 py-6">
+            <!-- 通知 -->
+            <div v-if="notification.show" 
+                 :class="['fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 fade-in',
+                          notification.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+              <div class="flex justify-between items-start">
+                <p>{{ notification.message }}</p>
+                <button @click="notification.show = false" class="ml-4 text-lg">&times;</button>
+              </div>
+            </div>
+
+            <!-- 未登錄 -->
+            <div v-if="!loggedIn" class="card text-center py-16">
+              <div class="text-8xl mb-6">🎫</div>
+              <h2 class="text-3xl font-bold text-gray-800 mb-3">歡迎使用智能搶票助手</h2>
+              <p class="text-gray-600 mb-8">自動化搶票 · 實時通知 · 多設備同步</p>
+              <button @click="handleLogin" class="btn-primary text-lg px-8 py-3">
+                🚀 開始使用
+              </button>
+            </div>
+
+            <!-- 已登錄 -->
+            <div v-if="loggedIn" class="space-y-6">
+              <!-- 標籤導航 -->
+              <div class="bg-white rounded-lg shadow-sm p-1 inline-flex gap-1 flex-wrap">
+                <button 
+                  v-for="tab in tabs" :key="tab"
+                  @click="activeTab = tab"
+                  :class="['px-4 py-2 rounded-md text-sm font-medium transition',
+                           activeTab === tab ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                  {{ tab }}
+                </button>
+              </div>
+
+              <!-- 任務列表 (含搜尋和批量操作) -->
+              <div v-if="activeTab === '任務列表'">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                  <h2 class="text-2xl font-bold text-gray-800">我的任務</h2>
+                  <div class="flex gap-2">
+                    <button @click="showForm = true" class="btn-primary">➕ 新增任務</button>
+                    <button @click="showImportDialog = true" class="btn-secondary">📥 導入</button>
+                    <button @click="exportCurrentTasks" class="btn-secondary">📤 導出</button>
+                  </div>
+                </div>
+
+                <!-- 搜尋和過濾 -->
+                <div class="card mb-4 space-y-3">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input 
+                      v-model="searchQuery"
+                      @input="performSearch"
+                      type="text" 
+                      placeholder="🔍 搜尋任務名稱..."
+                      class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    
+                    <select v-model="filterStatus" 
+                            @change="applyFilters"
+                            class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                      <option value="">全部狀態</option>
+                      <option value="pending">待機</option>
+                      <option value="running">運行中</option>
+                      <option value="success">成功</option>
+                      <option value="failed">失敗</option>
+                      <option value="paused">已暫停</option>
+                    </select>
+
+                    <select v-model="sortBy" 
+                            @change="applySort"
+                            class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                      <option value="createdAt">最新建立</option>
+                      <option value="priority">優先級</option>
+                      <option value="eventDate">活動日期</option>
+                    </select>
+                  </div>
+
+                  <!-- 批量操作 -->
+                  <div v-if="selectedTasks.length > 0" class="bg-indigo-50 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-sm font-semibold text-indigo-700">已選擇 {{ selectedTasks.length }} 個任務</span>
+                    <div class="flex gap-2">
+                      <button @click="batchStart" class="btn-sm bg-green-600 text-white hover:bg-green-700">
+                        ▶ 批量開始
+                      </button>
+                      <button @click="batchPause" class="btn-sm bg-yellow-600 text-white hover:bg-yellow-700">
+                        ⏸ 批量暫停
+                      </button>
+                      <button @click="batchDelete" class="btn-sm bg-red-600 text-white hover:bg-red-700">
+                        🗑 批量刪除
+                      </button>
+                      <button @click="clearSelection" class="btn-sm bg-gray-600 text-white hover:bg-gray-700">
+                        ✕ 取消選擇
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 任務顯示 -->
+                <div v-if="displayedTasks.length === 0" class="card text-center py-12">
+                  <div class="text-6xl mb-4">📝</div>
+                  <h3 class="text-xl font-bold text-gray-800 mb-2">暫無任務</h3>
+                  <p class="text-gray-600 mb-4">開始創建您的第一個搶票任務</p>
+                  <button @click="showForm = true" class="btn-primary">創建任務</button>
+                </div>
+
+                <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div v-for="task in displayedTasks" :key="task.id"
+                       class="card hover:shadow-lg transition">
+                    <div class="flex gap-3 mb-3">
+                      <input 
+                        v-model="selectedTasks"
+                        :value="task.id"
+                        type="checkbox"
+                        class="w-5 h-5 rounded cursor-pointer">
+                      <div class="flex-1">
+                        <h3 class="font-bold text-gray-800">{{ task.eventName }}</h3>
+                        <p class="text-sm text-gray-500">{{ task.name }}</p>
+                      </div>
+                      <span :class="['status-badge', statusClass(task.status)]">
+                        {{ statusText(task.status) }}
+                      </span>
+                    </div>
+                    <div class="space-y-2 text-sm text-gray-600 mb-4">
+                      <div>📅 {{ task.eventDate }}</div>
+                      <div>⏰ {{ task.startTime }}</div>
+                      <div>🎫 {{ task.ticketQuantity }} 張</div>
+                      <div>⭐ {{ task.priority }}/10 優先級</div>
+                    </div>
+                    <div class="flex gap-2 pt-3 border-t flex-wrap">
+                      <button v-if="task.status === 'pending'" 
+                              @click="startTask(task.id)"
+                              class="btn-sm bg-green-600 text-white hover:bg-green-700 flex-1">
+                        ▶ 開始
+                      </button>
+                      <button v-if="task.status === 'running'" 
+                              @click="pauseTask(task.id)"
+                              class="btn-sm bg-yellow-600 text-white hover:bg-yellow-700 flex-1">
+                        ⏸ 暫停
+                      </button>
+                      <button @click="deleteTask(task.id)"
+                              class="btn-sm bg-red-600 text-white hover:bg-red-700">
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 統計 -->
+              <div v-if="activeTab === '統計'">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">統計分析</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div class="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                    <div class="text-3xl mb-2">📊</div>
+                    <div class="text-3xl font-bold">{{ stats.total }}</div>
+                    <div class="text-sm opacity-90">總任務數</div>
+                  </div>
+                  <div class="card bg-gradient-to-br from-green-500 to-green-600 text-white">
+                    <div class="text-3xl mb-2">✅</div>
+                    <div class="text-3xl font-bold">{{ stats.success }}</div>
+                    <div class="text-sm opacity-90">成功任務</div>
+                  </div>
+                  <div class="card bg-gradient-to-br from-red-500 to-red-600 text-white">
+                    <div class="text-3xl mb-2">❌</div>
+                    <div class="text-3xl font-bold">{{ stats.failed }}</div>
+                    <div class="text-sm opacity-90">失敗任務</div>
+                  </div>
+                  <div class="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                    <div class="text-3xl mb-2">📈</div>
+                    <div class="text-3xl font-bold">{{ stats.rate }}%</div>
+                    <div class="text-sm opacity-90">成功率</div>
+                  </div>
+                </div>
+
+                <!-- 任務分類統計 -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="card">
+                    <h3 class="text-lg font-bold mb-4">狀態分布</h3>
+                    <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                        <span class="text-sm">待機</span>
+                        <div class="flex-1 mx-3 h-2 bg-gray-200 rounded">
+                          <div class="h-full bg-gray-500 rounded" :style="{width: stats.pendingPercent + '%'}"></div>
+                        </div>
+                        <span class="text-sm font-semibold">{{ stats.pending }}</span>
+                      </div>
+                      <div class="flex justify-between items-center">
+                        <span class="text-sm">運行中</span>
+                        <div class="flex-1 mx-3 h-2 bg-gray-200 rounded">
+                          <div class="h-full bg-blue-500 rounded" :style="{width: stats.runningPercent + '%'}"></div>
+                        </div>
+                        <span class="text-sm font-semibold">{{ stats.running }}</span>
+                      </div>
+                      <div class="flex justify-between items-center">
+                        <span class="text-sm">成功</span>
+                        <div class="flex-1 mx-3 h-2 bg-gray-200 rounded">
+                          <div class="h-full bg-green-500 rounded" :style="{width: stats.successPercent + '%'}"></div>
+                        </div>
+                        <span class="text-sm font-semibold">{{ stats.success }}</span>
+                      </div>
+                      <div class="flex justify-between items-center">
+                        <span class="text-sm">失敗</span>
+                        <div class="flex-1 mx-3 h-2 bg-gray-200 rounded">
+                          <div class="h-full bg-red-500 rounded" :style="{width: stats.failedPercent + '%'}"></div>
+                        </div>
+                        <span class="text-sm font-semibold">{{ stats.failed }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <h3 class="text-lg font-bold mb-4">優先級分布</h3>
+                    <div class="space-y-3">
+                      <div v-for="level in [1, 2, 3]" :key="level" class="flex items-center gap-3">
+                        <span class="text-sm font-semibold">等級 {{ level * 3 }}-{{ (level + 1) * 3 }}</span>
+                        <div class="flex-1 h-8 bg-gray-200 rounded flex items-center justify-center text-sm font-bold">
+                          {{ countByPriority(level * 3, (level + 1) * 3) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 設置 -->
+              <div v-if="activeTab === '設置'">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">系統設置</h2>
+                <div class="space-y-4">
+                  <div class="card space-y-4">
+                    <h3 class="text-lg font-semibold border-b pb-3">通知設置</h3>
+                    <div class="flex justify-between items-center">
+                      <div>
+                        <p class="font-semibold">桌面通知</p>
+                        <p class="text-sm text-gray-600">允許顯示桌面通知</p>
+                      </div>
+                      <button @click="requestNotifPermission"
+                              class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        {{ notificationEnabled ? '✓ 已啟用' : '請求權限' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="card space-y-4">
+                    <h3 class="text-lg font-semibold border-b pb-3">數據管理</h3>
+                    <div class="flex justify-between items-center">
+                      <div>
+                        <p class="font-semibold">導出所有任務</p>
+                        <p class="text-sm text-gray-600">備份您的所有任務數據</p>
+                      </div>
+                      <div class="flex gap-2">
+                        <button @click="exportAsJSON" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                          JSON
+                        </button>
+                        <button @click="exportAsCSV" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                          CSV
+                        </button>
+                      </div>
+                    </div>
+                    <div class="flex justify-between items-center pt-3 border-t">
+                      <div>
+                        <p class="font-semibold">清除所有數據</p>
+                        <p class="text-sm text-gray-600 text-red-600">此操作無法撤銷</p>
+                      </div>
+                      <button @click="clearAllData" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        清除數據
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="card bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-3">系統版本</h3>
+                    <div class="space-y-2 text-sm">
+                      <div class="flex justify-between">
+                        <span>應用版本：</span>
+                        <span class="font-semibold">v0.8 - Stage 6</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span>測試狀態：</span>
+                        <span class="font-semibold text-green-600">162/162 ✓</span>
+                      </div>
+                      <div class="flex justify-between">
+                        <span>核心模塊：</span>
+                        <span class="font-semibold">8 (含新增 Stage 6 功能)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <!-- 任務表單彈窗 -->
+          <div v-if="showForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                  <h2 class="text-2xl font-bold">創建新任務</h2>
+                  <button @click="closeForm" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+                </div>
+                <form @submit.prevent="saveTask" class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-semibold mb-1">任務名稱</label>
+                    <input v-model="form.name" type="text" required
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-semibold mb-1">活動名稱</label>
+                    <input v-model="form.eventName" type="text" required
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-semibold mb-1">活動日期</label>
+                      <input v-model="form.eventDate" type="date" required
+                             class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                      <label class="block text-sm font-semibold mb-1">開搶時間</label>
+                      <input v-model="form.startTime" type="datetime-local" required
+                             class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-semibold mb-1">購買數量</label>
+                      <input v-model.number="form.ticketQuantity" type="number" min="1" max="10" required
+                             class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                      <label class="block text-sm font-semibold mb-1">優先級 (1-10)</label>
+                      <input v-model.number="form.priority" type="number" min="1" max="10"
+                             class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-semibold mb-1">目標網址</label>
+                    <input v-model="form.targetUrl" type="url"
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                           placeholder="https://ticketmaster.com/...">
+                  </div>
+                  <div class="flex gap-3 pt-4">
+                    <button type="submit" class="btn-primary flex-1">創建任務</button>
+                    <button type="button" @click="closeForm" class="btn-secondary flex-1">取消</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- 導入對話框 -->
+          <div v-if="showImportDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">導入任務</h2>
+                <button @click="showImportDialog = false" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+              </div>
+              
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-semibold mb-2">選擇文件格式</label>
+                  <select v-model="importFormat" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="json">JSON 格式</option>
+                    <option value="csv">CSV 格式</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold mb-2">上傳文件</label>
+                  <input 
+                    type="file"
+                    :accept="importFormat === 'json' ? '.json' : '.csv'"
+                    @change="handleFileImport"
+                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div class="flex gap-3">
+                  <button @click="confirmImport" class="btn-primary flex-1" v-if="importData">導入</button>
+                  <button @click="showImportDialog = false" class="btn-secondary flex-1">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+
+      setup() {
+        const loading = ref(false)
+        const loggedIn = ref(false)
+        const activeTab = ref('任務列表')
+        const showForm = ref(false)
+        const showImportDialog = ref(false)
+        const tasks = ref([])
+        const displayedTasks = ref([])
+        const selectedTasks = ref([])
+        const searchQuery = ref('')
+        const filterStatus = ref('')
+        const sortBy = ref('createdAt')
+        const importFormat = ref('json')
+        const importData = ref(null)
+        const notificationEnabled = ref(false)
+        const notification = reactive({ show: false, type: 'success', message: '' })
+        const form = reactive({
+          name: '', eventName: '', eventDate: '', startTime: '',
+          ticketQuantity: 1, priority: 5, targetUrl: '', clickSelector: '.buy-button'
+        })
+
+        const tabs = ['任務列表', '統計', '設置']
+
+        const stats = computed(() => {
+          const total = tasks.value.length
+          const pending = tasks.value.filter(t => t.status === 'pending').length
+          const running = tasks.value.filter(t => t.status === 'running').length
+          const success = tasks.value.filter(t => t.status === 'success').length
+          const failed = tasks.value.filter(t => t.status === 'failed').length
+          
+          return { 
+            total, 
+            pending,
+            running,
+            success, 
+            failed, 
+            pendingPercent: total > 0 ? (pending / total) * 100 : 0,
+            runningPercent: total > 0 ? (running / total) * 100 : 0,
+            successPercent: total > 0 ? (success / total) * 100 : 0,
+            failedPercent: total > 0 ? (failed / total) * 100 : 0,
+            rate: total > 0 ? Math.round((success / total) * 100) : 0 
+          }
+        })
+
+        const countByPriority = (min, max) => {
+          return tasks.value.filter(t => t.priority >= min && t.priority <= max).length
+        }
+
+        const notify = (msg, type = 'success') => {
+          notification.show = true
+          notification.type = type
+          notification.message = msg
+          setTimeout(() => notification.show = false, 3000)
+        }
+
+        const statusClass = (status) => {
+          const map = {
+            'pending': 'status-pending',
+            'running': 'status-running',
+            'success': 'status-success',
+            'failed': 'status-failed',
+            'paused': 'status-paused'
+          }
+          return map[status] || 'status-pending'
+        }
+
+        const statusText = (status) => {
+          const map = {
+            'pending': '待機',
+            'running': '運行中',
+            'success': '成功',
+            'failed': '失敗',
+            'paused': '已暫停'
+          }
+          return map[status] || status
+        }
+
+        const loadTasks = async () => {
+          tasks.value = await botEngine.listTasks()
+          applyFilters()
+        }
+
+        const performSearch = debounce(async () => {
+          if (!searchQuery.value.trim()) {
+            applyFilters()
+            return
+          }
+          
+          const results = advancedSearch(tasks.value, searchQuery.value, {
+            searchFields: ['name', 'eventName'],
+            matchMode: 'contains',
+            caseSensitive: false
+          })
+          displayedTasks.value = results
+        }, 300)
+
+        const applyFilters = () => {
+          let filtered = tasks.value
+          
+          if (filterStatus.value) {
+            filtered = filterTasks(tasks.value, { status: filterStatus.value })
+          }
+          
+          displayedTasks.value = filtered
+          applySort()
+        }
+
+        const applySort = () => {
+          const sorted = advancedSort(displayedTasks.value, sortBy.value, 'desc')
+          displayedTasks.value = sorted
+        }
+
+        const handleLogin = async () => {
+          loading.value = true
+          try {
+            await loginAnonymous()
+            loggedIn.value = true
+            await loadTasks()
+            notify('登入成功！')
+          } catch (e) {
+            notify(e.message, 'error')
+          } finally {
+            loading.value = false
+          }
+        }
+
+        const handleLogout = async () => {
+          await logout()
+          loggedIn.value = false
+          tasks.value = []
+          displayedTasks.value = []
+          notify('登出成功')
+        }
+
+        const saveTask = async () => {
+          try {
+            const task = createDefaultTask({
+              name: form.name,
+              eventName: form.eventName,
+              eventDate: form.eventDate,
+              startTime: form.startTime,
+              ticketQuantity: form.ticketQuantity,
+              priority: form.priority,
+              config: {
+                targetUrl: form.targetUrl,
+                clickSelector: form.clickSelector,
+                clickDelay: 500,
+                retryCount: 3
+              }
+            })
+            await botEngine.addTask(task)
+            await loadTasks()
+            closeForm()
+            notify('任務創建成功！')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const startTask = async (id) => {
+          try {
+            await botEngine.startTask(id)
+            await loadTasks()
+            notify('任務已開始執行')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const pauseTask = async (id) => {
+          try {
+            await botEngine.pauseTask(id)
+            await loadTasks()
+            notify('任務已暫停')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const deleteTask = async (id) => {
+          if (!confirm('確定要刪除這個任務嗎？')) return
+          try {
+            await botEngine.deleteTask(id)
+            await loadTasks()
+            notify('任務已刪除')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const batchStart = async () => {
+          try {
+            const startedCount = await batchStartTasks(botEngine, selectedTasks.value)
+            await loadTasks()
+            selectedTasks.value = []
+            notify(`成功開始 ${startedCount} 個任務`)
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const batchPause = async () => {
+          try {
+            const pausedCount = await batchPauseTasks(botEngine, selectedTasks.value)
+            await loadTasks()
+            selectedTasks.value = []
+            notify(`成功暫停 ${pausedCount} 個任務`)
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const batchDelete = async () => {
+          if (!confirm(`確定要刪除 ${selectedTasks.value.length} 個任務嗎？`)) return
+          try {
+            const deletedCount = await batchDeleteTasks(botEngine, selectedTasks.value)
+            await loadTasks()
+            selectedTasks.value = []
+            notify(`成功刪除 ${deletedCount} 個任務`)
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const clearSelection = () => {
+          selectedTasks.value = []
+        }
+
+        const exportAsJSON = async () => {
+          try {
+            const json = await exportTasksAsJSON(tasks.value)
+            const blob = new Blob([json], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `tasks-${new Date().toISOString().slice(0, 10)}.json`
+            a.click()
+            notify('任務已導出為 JSON')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const exportAsCSV = async () => {
+          try {
+            const csv = await exportTasksAsCSV(tasks.value)
+            const blob = new Blob([csv], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `tasks-${new Date().toISOString().slice(0, 10)}.csv`
+            a.click()
+            notify('任務已導出為 CSV')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const exportCurrentTasks = () => {
+          showImportDialog.value = true
+          // 提示選擇格式
+          notify('請選擇導出格式')
+        }
+
+        const handleFileImport = async (e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+          
+          try {
+            const text = await file.text()
+            if (importFormat.value === 'json') {
+              importData.value = JSON.parse(text)
+            } else {
+              importData.value = text
+            }
+            notify('文件已加載，點擊導入按鈕確認')
+          } catch (e) {
+            notify('文件格式錯誤', 'error')
+          }
+        }
+
+        const confirmImport = async () => {
+          try {
+            let importedTasks
+            if (importFormat.value === 'json') {
+              importedTasks = await importTasksFromJSON(importData.value)
+            } else {
+              importedTasks = await importTasksFromCSV(importData.value)
+            }
+            
+            for (const task of importedTasks) {
+              await botEngine.addTask(task)
+            }
+            
+            await loadTasks()
+            showImportDialog.value = false
+            importData.value = null
+            notify(`成功導入 ${importedTasks.length} 個任務`)
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const clearAllData = async () => {
+          if (!confirm('此操作將刪除所有任務且無法撤銷，確定嗎？')) return
+          try {
+            for (const task of tasks.value) {
+              await botEngine.deleteTask(task.id)
+            }
+            await loadTasks()
+            notify('所有數據已清除')
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        const requestNotifPermission = async () => {
+          try {
+            const permission = await notificationSystem.requestPermission()
+            if (permission === 'granted') {
+              notificationEnabled.value = true
+              notify('通知權限已啟用！')
+            } else {
+              notify('通知權限被拒絕', 'error')
+            }
+          } catch (e) {
+            notify(e.message, 'error')
+          }
+        }
+
+        onMounted(async () => {
+          try {
+            await initGUN()
+            const user = getCurrentUser()
+            if (user) {
+              loggedIn.value = true
+              await loadTasks()
+            }
+          } catch (e) {
+            console.error(e)
+          } finally {
+            loading.value = false
+          }
+        })
+
+        return {
+          loading, loggedIn, activeTab, showForm, showImportDialog, tasks, displayedTasks, selectedTasks, 
+          searchQuery, filterStatus, sortBy, importFormat, importData, notificationEnabled,
+          notification, form, tabs, stats, countByPriority,
+          handleLogin, handleLogout, saveTask, startTask, pauseTask, deleteTask,
+          batchStart, batchPause, batchDelete, clearSelection,
+          exportAsJSON, exportAsCSV, exportCurrentTasks, handleFileImport, confirmImport, clearAllData,
+          closeForm, statusClass, statusText, requestNotifPermission, performSearch, applyFilters, applySort
+        }
+      }
+    })
+
+    app.mount('#app')
+  </script>
+</body>
+</html>

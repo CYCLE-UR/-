@@ -1,0 +1,134 @@
+/* 自定義樣式覆蓋 */
+
+:root {
+  --primary-color: #6366f1;
+  --success-color: #10b981;
+  --danger-color: #ef4444;
+  --warning-color: #f59e0b;
+}
+
+/* 動畫效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* 按鈕樣式 */
+.btn-primary {
+  @apply px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium;
+}
+
+.btn-danger {
+  @apply px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium;
+}
+
+/* 卡片樣式 */
+.card {
+  @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
+}
+
+/* 輸入框樣式 */
+.input-field {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+
+/* 通知樣式 */
+.notification {
+  @apply fixed top-4 right-4 max-w-sm z-50;
+}
+
+.notification-success {
+  @apply bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded;
+}
+
+.notification-error {
+  @apply bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded;
+}
+
+.notification-warning {
+  @apply bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded;
+}
+
+.notification-info {
+  @apply bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded;
+}
+
+/* 加載動畫 */
+.spinner {
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #6366f1;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 狀態標籤 */
+.badge {
+  @apply inline-block px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-success {
+  @apply bg-green-100 text-green-800;
+}
+
+.badge-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.badge-error {
+  @apply bg-red-100 text-red-800;
+}
+
+.badge-info {
+  @apply bg-blue-100 text-blue-800;
+}
+
+/* 任務卡片狀態 */
+.status-badge {
+  @apply px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.status-pending {
+  @apply bg-gray-200 text-gray-700;
+}
+
+.status-running {
+  @apply bg-blue-500 text-white animate-pulse;
+}
+
+.status-success {
+  @apply bg-green-500 text-white;
+}
+
+.status-failed {
+  @apply bg-red-500 text-white;
+}
+
+.status-paused {
+  @apply bg-yellow-500 text-white;
+}
+
+/* 按鈕尺寸 */
+.btn-sm {
+  @apply px-3 py-1 text-sm rounded-lg font-medium transition-colors;
+}
