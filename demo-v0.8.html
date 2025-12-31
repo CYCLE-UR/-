@@ -518,6 +518,18 @@
           setTimeout(() => notification.show = false, 3000)
         }
 
+        const closeForm = () => {
+          showForm.value = false
+          form.name = ''
+          form.eventName = ''
+          form.eventDate = ''
+          form.startTime = ''
+          form.ticketQuantity = 1
+          form.priority = 5
+          form.targetUrl = ''
+          form.clickSelector = ''
+        }
+
         const statusClass = (status) => {
           const map = {
             'pending': 'status-pending',
