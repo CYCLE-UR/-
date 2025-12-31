@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>測試頁面 - 檢查所有連結</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-8 text-gray-800">🧪 測試所有頁面連結</h1>
+    
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">✅ 已修復的問題</h2>
+      <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
+        <p class="text-green-700">
+          <strong>問題：</strong> user-system-v2.html 和 admin-v0.8.html 有重定向代碼，導致無法正常訪問
+        </p>
+        <p class="text-green-700 mt-2">
+          <strong>修復：</strong> 已移除頂部的重定向代碼，現在可以正常使用
+        </p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">🔗 測試所有頁面</h2>
+      <p class="text-gray-600 mb-4">點擊下方連結測試每個頁面是否正常工作：</p>
+      
+      <div class="space-y-3">
+        <!-- 主頁面 -->
+        <a href="index.html" 
+           class="flex items-center justify-between p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">🏠</span>
+            <div>
+              <div class="font-semibold text-gray-800">主頁</div>
+              <div class="text-sm text-gray-500">index.html</div>
+            </div>
+          </div>
+          <span class="text-blue-600">→</span>
+        </a>
+
+        <!-- 用戶系統 v2 -->
+        <a href="user-system-v2.html" 
+           class="flex items-center justify-between p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">👥</span>
+            <div>
+              <div class="font-semibold text-gray-800">協作系統（推薦）</div>
+              <div class="text-sm text-gray-500">user-system-v2.html - 已修復 ✅</div>
+            </div>
+          </div>
+          <span class="text-purple-600">→</span>
+        </a>
+
+        <!-- 完整演示 -->
+        <a href="demo-v0.8.html" 
+           class="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">🎫</span>
+            <div>
+              <div class="font-semibold text-gray-800">完整演示</div>
+              <div class="text-sm text-gray-500">demo-v0.8.html</div>
+            </div>
+          </div>
+          <span class="text-green-600">→</span>
+        </a>
+
+        <!-- 後台管理 v0.8 -->
+        <a href="admin-v0.8.html" 
+           class="flex items-center justify-between p-4 border-2 border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">🔧</span>
+            <div>
+              <div class="font-semibold text-gray-800">後台管理系統</div>
+              <div class="text-sm text-gray-500">admin-v0.8.html - 已修復 ✅</div>
+            </div>
+          </div>
+          <span class="text-red-600">→</span>
+        </a>
+
+        <!-- 舊版演示 -->
+        <a href="demo.html" 
+           class="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">📦</span>
+            <div>
+              <div class="font-semibold text-gray-800">基礎演示（舊版）</div>
+              <div class="text-sm text-gray-500">demo.html</div>
+            </div>
+          </div>
+          <span class="text-gray-600">→</span>
+        </a>
+
+        <!-- 舊版後台 -->
+        <a href="admin.html" 
+           class="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">⚙️</span>
+            <div>
+              <div class="font-semibold text-gray-800">基礎後台（舊版）</div>
+              <div class="text-sm text-gray-500">admin.html</div>
+            </div>
+          </div>
+          <span class="text-gray-600">→</span>
+        </a>
+
+        <!-- 舊版用戶系統 -->
+        <a href="user-system.html" 
+           class="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl">👤</span>
+            <div>
+              <div class="font-semibold text-gray-800">基礎用戶系統（舊版）</div>
+              <div class="text-sm text-gray-500">user-system.html</div>
+            </div>
+          </div>
+          <span class="text-gray-600">→</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg">
+      <h3 class="font-semibold text-blue-900 mb-2">💡 使用提示</h3>
+      <ul class="text-blue-800 space-y-2 text-sm">
+        <li>✅ <strong>推薦使用：</strong> user-system-v2.html（協作系統）</li>
+        <li>✅ <strong>快速體驗：</strong> demo-v0.8.html（完整功能）</li>
+        <li>🔐 <strong>管理員：</strong> admin-v0.8.html（密碼: admin/admin123）</li>
+        <li>📱 <strong>本地測試：</strong> http://localhost:8000/test.html</li>
+      </ul>
+    </div>
+
+    <div class="mt-6 text-center">
+      <a href="README.md" class="text-blue-600 hover:underline">📖 查看完整文檔</a>
+      <span class="mx-2">|</span>
+      <a href="QUICK_START.md" class="text-blue-600 hover:underline">⚡ 快速開始</a>
+      <span class="mx-2">|</span>
+      <a href="USAGE_GUIDE.md" class="text-blue-600 hover:underline">📚 使用指南</a>
+    </div>
+  </div>
+
+  <script>
+    // 記錄頁面訪問
+    console.log('測試頁面已載入');
+    console.log('本地測試網址: http://localhost:8000/');
+    
+    // 檢測是否在本地運行
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      console.log('✅ 正在本地環境運行');
+    } else {
+      console.log('🌐 正在線上環境運行');
+    }
+  </script>
+</body>
+</html>
