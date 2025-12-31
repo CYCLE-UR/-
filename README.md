@@ -2,17 +2,35 @@
 
 一個純前端網頁應用，幫助追星族通過自動化機制搶購演唱會門票。
 
+## 🌐 在線使用（推薦）
+
+**項目已部署到 GitHub Pages，可直接使用：**
+
+| 頁面 | 網址 | 說明 |
+|------|------|------|
+| 🏠 主頁 | [https://cycle-ur.github.io/-/](https://cycle-ur.github.io/-/) | 項目介紹 |
+| 👥 協作系統 | [https://cycle-ur.github.io/-/user-system-v2.html](https://cycle-ur.github.io/-/user-system-v2.html) | 邀請朋友，協作搶票 |
+| 🎫 完整演示 | [https://cycle-ur.github.io/-/demo-v0.8.html](https://cycle-ur.github.io/-/demo-v0.8.html) | 所有功能演示 |
+| 🔧 後台管理 | [https://cycle-ur.github.io/-/admin-v0.8.html](https://cycle-ur.github.io/-/admin-v0.8.html) | 管理員後台 |
+
+> **提示：** 協作系統可以點擊「快速登入: Alice」或「快速登入: Bob」立即體驗！
+
 ## 核心功能
 
 - 🤖 **自動搶票**：設置時間和目標，機器人自動執行購票
+- 👥 **協作功能**：邀請朋友，共享任務，提高成功率
 - 🔄 **多設備同步**：使用 GUN.js 實現跨設備數據同步
 - 🔒 **隱私優先**：完全本地化，無需後端伺服器
 - ⚡ **即時通知**：搶票狀態實時推送通知
+- 📊 **統計分析**：成功率、任務統計、數據導出
 
 ## 快速開始
 
-### 在線使用
-直接打開 `index.html` 在任何現代瀏覽器中即可使用。
+### 💻 在線使用
+訪問 [https://cycle-ur.github.io/-/](https://cycle-ur.github.io/-/) 立即開始使用。
+
+### 📥 本地開發
+克隆倉庫到本地進行開發：
 
 ### 本地開發
 
@@ -36,10 +54,23 @@ npm run test
 npm run test:watch
 ```
 
-## 項目文檔
+## 📚 項目文檔
 
+### 用戶文檔
+- **[PUBLIC_ACCESS_GUIDE.md](./PUBLIC_ACCESS_GUIDE.md)** - 如何讓他人使用（部署指南）⭐ 新增
+- **[QUICK_START.md](./QUICK_START.md)** - 5 分鐘快速上手
+- **[USAGE_GUIDE.md](./USAGE_GUIDE.md)** - 詳細使用教程
+- **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** - 快速參考卡
+- **[COLLABORATION_SYSTEM.md](./COLLABORATION_SYSTEM.md)** - 協作功能說明
+
+### 開發者文檔
 - **[PRD.md](./PRD.md)** - 完整的產品需求文檔，包含功能定義和技術架構
 - **[AGENTS.md](./AGENTS.md)** - 項目進度記錄，供後續開發者快速上手
+- **[FRONTEND_VS_BACKEND.md](./FRONTEND_VS_BACKEND.md)** - 前後台功能對比
+
+### 部署文檔
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - 詳細部署說明
+- **[SHARE_GUIDE.md](./SHARE_GUIDE.md)** - 分享給朋友的指南
 
 ## 技術棧
 
