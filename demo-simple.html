@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能搶票助手 - 快速演示</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="app">
+    <!-- 導航欄 -->
+    <nav class="bg-white shadow-md">
+      <div class="max-w-7xl mx-auto px-4 py-4">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <div class="text-3xl">🎫</div>
+            <div>
+              <h1 class="text-xl font-bold text-gray-800">智能搶票助手</h1>
+              <p class="text-xs text-gray-500">快速演示版</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-4" v-if="currentUser">
+            <div class="text-sm">
+              <span class="font-bold text-indigo-600">{{ tasks.length }}</span> 任務
+            </div>
+            <button @click="logout" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">登出</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 主內容 -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+      <!-- 通知 -->
+      <div v-if="notification.show" 
+           :class="['fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50',
+                    notification.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+        <div class="flex justify-between items-start">
+          <p>{{ notification.message }}</p>
+          <button @click="notification.show = false" class="ml-4 text-lg font-bold">&times;</button>
+        </div>
+      </div>
+
+      <!-- 未登錄 -->
+      <div v-if="!currentUser" class="bg-white rounded-lg shadow-md p-8 text-center max-w-md mx-auto mt-12">
+        <div class="text-8xl mb-6">🎫</div>
+        <h2 class="text-3xl font-bold text-gray-800 mb-3">歡迎使用智能搶票助手</h2>
+        <p class="text-gray-600 mb-8">自動化搶票 · 實時通知</p>
+        <button @click="handleLogin" 
+                class="w-full bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 transition">
+          開始使用
+        </button>
+      </div>
+
+      <!-- 已登錄 -->
+      <div v-else>
+        <!-- 統計卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="text-3xl mb-2">📊</div>
+            <div class="text-3xl font-bold text-gray-800">{{ tasks.length }}</div>
+            <div class="text-sm text-gray-500">總任務數</div>
+          </div>
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="text-3xl mb-2">✅</div>
+            <div class="text-3xl font-bold text-green-600">{{ completedTasks }}</div>
+            <div class="text-sm text-gray-500">已完成</div>
+          </div>
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="text-3xl mb-2">⏳</div>
+            <div class="text-3xl font-bold text-blue-600">{{ pendingTasks }}</div>
+            <div class="text-sm text-gray-500">待處理</div>
+          </div>
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="text-3xl mb-2">📈</div>
+            <div class="text-3xl font-bold text-purple-600">{{ successRate }}%</div>
+            <div class="text-sm text-gray-500">成功率</div>
+          </div>
+        </div>
+
+        <!-- 任務管理 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold text-gray-800">任務列表</h2>
+            <button @click="showTaskModal = true" 
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+              ➕ 新增任務
+            </button>
+          </div>
+
+          <!-- 任務列表 -->
+          <div v-if="tasks.length === 0" class="text-center py-12 text-gray-400">
+            <div class="text-6xl mb-4">📋</div>
+            <p>還沒有任務，點擊「新增任務」開始</p>
+          </div>
+          <div v-else class="space-y-3">
+            <div v-for="task in tasks" :key="task.id" 
+                 class="border rounded-lg p-4 hover:shadow-md transition">
+              <div class="flex justify-between items-start mb-2">
+                <div>
+                  <h3 class="font-bold text-gray-800">{{ task.name }}</h3>
+                  <p class="text-sm text-gray-500">{{ task.eventName }}</p>
+                </div>
+                <span :class="['px-3 py-1 rounded-full text-xs font-semibold',
+                               task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                               task.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                               'bg-gray-100 text-gray-700']">
+                  {{ getStatusText(task.status) }}
+                </span>
+              </div>
+              <div class="text-sm text-gray-600 space-y-1 mb-3">
+                <div>📅 {{ task.eventDate }}</div>
+                <div>⏰ {{ task.startTime }}</div>
+                <div>🎫 {{ task.ticketQuantity }} 張</div>
+              </div>
+              <div class="flex gap-2">
+                <button v-if="task.status === 'pending'" 
+                        @click="startTask(task.id)"
+                        class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition text-sm">
+                  ▶ 開始
+                </button>
+                <button v-if="task.status === 'running'" 
+                        @click="pauseTask(task.id)"
+                        class="flex-1 bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 transition text-sm">
+                  ⏸ 暫停
+                </button>
+                <button @click="deleteTask(task.id)"
+                        class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition text-sm">
+                  🗑 刪除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 功能說明 -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg">
+          <h3 class="font-bold text-blue-900 mb-2">💡 功能說明</h3>
+          <ul class="text-blue-800 space-y-1 text-sm">
+            <li>✅ 這是簡化版演示，可以直接在瀏覽器打開</li>
+            <li>📱 完整版請訪問：<a href="demo-v0.8.html" class="underline">demo-v0.8.html</a>（需要本地伺服器）</li>
+            <li>👥 協作功能：<a href="user-system-v2.html" class="underline">user-system-v2.html</a></li>
+            <li>🔧 後台管理：<a href="admin-v0.8.html" class="underline">admin-v0.8.html</a></li>
+          </ul>
+        </div>
+      </div>
+    </main>
+
+    <!-- 新增任務彈窗 -->
+    <div v-if="showTaskModal" 
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+         @click.self="showTaskModal = false">
+      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-xl font-bold mb-4">新增搶票任務</h3>
+        <form @submit.prevent="createTask">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">任務名稱</label>
+              <input v-model="taskForm.name" 
+                     type="text" 
+                     required
+                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                     placeholder="例：五月天演唱會搶票">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">活動名稱</label>
+              <input v-model="taskForm.eventName" 
+                     type="text" 
+                     required
+                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                     placeholder="例：五月天2026世界巡迴">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">活動日期</label>
+              <input v-model="taskForm.eventDate" 
+                     type="date" 
+                     required
+                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">開始時間</label>
+              <input v-model="taskForm.startTime" 
+                     type="time" 
+                     required
+                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">票數</label>
+              <input v-model.number="taskForm.ticketQuantity" 
+                     type="number" 
+                     min="1"
+                     max="10"
+                     required
+                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+          </div>
+          <div class="flex gap-3 mt-6">
+            <button type="button" 
+                    @click="showTaskModal = false"
+                    class="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition">
+              取消
+            </button>
+            <button type="submit"
+                    class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+              創建
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed } = Vue
+
+    createApp({
+      setup() {
+        const currentUser = ref(null)
+        const showTaskModal = ref(false)
+        const tasks = ref([])
+        const notification = reactive({ show: false, message: '', type: 'success' })
+        const taskForm = reactive({
+          name: '',
+          eventName: '',
+          eventDate: '',
+          startTime: '',
+          ticketQuantity: 1
+        })
+
+        // 計算屬性
+        const completedTasks = computed(() => 
+          tasks.value.filter(t => t.status === 'completed').length
+        )
+        const pendingTasks = computed(() => 
+          tasks.value.filter(t => t.status === 'pending').length
+        )
+        const successRate = computed(() => {
+          const total = tasks.value.length
+          if (total === 0) return 0
+          return Math.round((completedTasks.value / total) * 100)
+        })
+
+        // 方法
+        const handleLogin = () => {
+          currentUser.value = 'User' + Math.floor(Math.random() * 1000)
+          loadTasks()
+          showNotification('登入成功！', 'success')
+        }
+
+        const logout = () => {
+          currentUser.value = null
+          tasks.value = []
+          showNotification('已登出', 'success')
+        }
+
+        const loadTasks = () => {
+          const saved = localStorage.getItem('demo_tasks_' + currentUser.value)
+          if (saved) {
+            tasks.value = JSON.parse(saved)
+          }
+        }
+
+        const saveTasks = () => {
+          localStorage.setItem('demo_tasks_' + currentUser.value, JSON.stringify(tasks.value))
+        }
+
+        const createTask = () => {
+          const newTask = {
+            id: Date.now().toString(),
+            ...taskForm,
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+          tasks.value.push(newTask)
+          saveTasks()
+          showTaskModal.value = false
+          showNotification('任務創建成功！', 'success')
+          
+          // 重置表單
+          Object.assign(taskForm, {
+            name: '',
+            eventName: '',
+            eventDate: '',
+            startTime: '',
+            ticketQuantity: 1
+          })
+        }
+
+        const startTask = (id) => {
+          const task = tasks.value.find(t => t.id === id)
+          if (task) {
+            task.status = 'running'
+            saveTasks()
+            showNotification('任務已開始執行', 'success')
+          }
+        }
+
+        const pauseTask = (id) => {
+          const task = tasks.value.find(t => t.id === id)
+          if (task) {
+            task.status = 'pending'
+            saveTasks()
+            showNotification('任務已暫停', 'success')
+          }
+        }
+
+        const deleteTask = (id) => {
+          if (confirm('確定要刪除這個任務嗎？')) {
+            tasks.value = tasks.value.filter(t => t.id !== id)
+            saveTasks()
+            showNotification('任務已刪除', 'success')
+          }
+        }
+
+        const getStatusText = (status) => {
+          const statusMap = {
+            pending: '待機',
+            running: '執行中',
+            completed: '已完成',
+            failed: '失敗'
+          }
+          return statusMap[status] || status
+        }
+
+        const showNotification = (message, type = 'success') => {
+          notification.message = message
+          notification.type = type
+          notification.show = true
+          setTimeout(() => {
+            notification.show = false
+          }, 3000)
+        }
+
+        return {
+          currentUser,
+          showTaskModal,
+          tasks,
+          notification,
+          taskForm,
+          completedTasks,
+          pendingTasks,
+          successRate,
+          handleLogin,
+          logout,
+          createTask,
+          startTask,
+          pauseTask,
+          deleteTask,
+          getStatusText
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
